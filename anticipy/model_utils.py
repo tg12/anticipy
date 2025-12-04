@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # License:          This module is released under the terms of the LICENSE file
 #                   contained within this applications INSTALL directory
@@ -15,9 +14,10 @@ Utility functions for model generation
 # -- Public Imports
 import logging
 import math
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
 
 # -- Private Imports
 
@@ -27,22 +27,23 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 dict_wday_name = {
-    0: 'W-MON',
-    1: 'W-TUE',
-    2: 'W-WED',
-    3: 'W-THU',
-    4: 'W-FRI',
-    5: 'W-SAT',
-    6: 'W-SUN',
+    0: "W-MON",
+    1: "W-TUE",
+    2: "W-WED",
+    3: "W-THU",
+    4: "W-FRI",
+    5: "W-SAT",
+    6: "W-SUN",
 }
 
 
 # -- Exception classes
 
+
 # -- Functions
 def logger_info(msg, data):
     # Convenience function for easier log typing
-    logger.info(msg + '\n%s', data)
+    logger.info(msg + "\n%s", data)
 
 
 def array_transpose(a):
@@ -70,10 +71,7 @@ def model_requires_scaling(model):
     :return: True if function is logistic or sigmoidal
     :rtype: bool
     """
-    requires_scaling = model is not None and model.name in [
-        'logistic',
-        'sigmoid'
-    ]
+    requires_scaling = model is not None and model.name in ["logistic", "sigmoid"]
     return requires_scaling
 
 
@@ -95,43 +93,29 @@ def apply_a_x_scaling(a_x, model=None, scaling_factor=100.0):
     return a_x
 
 
-dict_freq_units_per_year = dict(
-    A=1.0,
-    Y=1.0,
-    D=365.0,
-    W=52.0,
-    M=12,
-    Q=4,
-    H=24 * 365.0
-)
+dict_freq_units_per_year = dict(A=1.0, Y=1.0, D=365.0, W=52.0, M=12, Q=4, H=24 * 365.0)
 
-dict_dateoffset_input = dict(
-    Y='years',
-    A='years',
-    M='months',
-    W='weeks',
-    D='days',
-    H='hours'
-)
+dict_dateoffset_input = dict(Y="years", A="years", M="months", W="weeks", D="days", H="hours")
 
 
 def get_normalized_x_from_date(s_date):
     """Get column of days since Monday of first date"""
     date_start = s_date.iloc[0]
     # Convert to Monday
-    date_start = date_start - pd.to_timedelta(date_start.weekday(), unit='D')
+    date_start = date_start - pd.to_timedelta(date_start.weekday(), unit="D")
     s_x = (s_date - date_start).dt.days
     return s_x
 
 
 def get_s_x_extrapolate(
-        date_start_actuals,
-        date_end_actuals,
-        model=None,
-        freq=None,
-        extrapolate_years=2.5,
-        scaling_factor=100.0,
-        x_start_actuals=0.):
+    date_start_actuals,
+    date_end_actuals,
+    model=None,
+    freq=None,
+    extrapolate_years=2.5,
+    scaling_factor=100.0,
+    x_start_actuals=0.0,
+):
     """
     Return a_x series with DateTimeIndex, covering the date range for the
         actuals, plus a forecast period.
@@ -146,8 +130,8 @@ def get_s_x_extrapolate(
     :type model: function
     :param freq: Time unit between samples. Supported units are 'W' for weekly
         samples, or 'D' for daily samples. (untested) Any date unit or time
-        unit accepted by numpy should also work, see
-        https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.datetime.html#arrays-dtypes-dateunits # noqa
+        unit accepted by numpy should also work; consult numpy datetime dtype
+        documentation for supported units.
     :type freq: basestring
     :param shifted_origin: Offset to apply to a_x
     :type shifted_origin: int
@@ -165,8 +149,9 @@ def get_s_x_extrapolate(
     The number of additional samples for the forecast period is
     time_resolution * extrapolate_years, rounded down
     """
-    if isinstance(date_start_actuals, str) or \
-            isinstance(date_start_actuals, datetime):  # Use dates if available
+    if isinstance(date_start_actuals, str) or isinstance(
+        date_start_actuals, datetime
+    ):  # Use dates if available
         date_start_actuals = pd.to_datetime(date_start_actuals)
         date_end_actuals = pd.to_datetime(date_end_actuals)
 
@@ -175,28 +160,22 @@ def get_s_x_extrapolate(
         if freq is None:  # Default frequency
             freq = expected_freq
         else:
-            if freq.startswith('W'):
-                assert expected_freq == freq, \
-                    'Error: with weekly frequency, freq ' \
-                    'parameter must match weekday of date_start_actuals:' \
-                    ' {} - {} , {}' \
-                        .format(freq, expected_freq, date_start_actuals)
+            if freq.startswith("W"):
+                assert expected_freq == freq, (
+                    "Error: with weekly frequency, freq "
+                    "parameter must match weekday of date_start_actuals:"
+                    f" {freq} - {expected_freq} , {date_start_actuals}"
+                )
 
         freq_short = freq[0:1]  # Changes e.g. W-MON to W
         # freq_units_per_year = 52.0 if freq_short=='W' else 365.0
         # Todo: change to dict to support more frequencies
         freq_units_per_year = dict_freq_units_per_year.get(freq_short, 365.0)
         extrapolate_units = extrapolate_years * freq_units_per_year
-        offset_input = {dict_dateoffset_input.get(freq_short):
-                            extrapolate_units}
-        date_end_forecast = date_end_actuals + \
-                            pd.DateOffset(**offset_input)
+        offset_input = {dict_dateoffset_input.get(freq_short): extrapolate_units}
+        date_end_forecast = date_end_actuals + pd.DateOffset(**offset_input)
 
-        i_date = pd.date_range(
-            date_start_actuals,
-            date_end_forecast,
-            freq=freq,
-            name='date')
+        i_date = pd.date_range(date_start_actuals, date_end_forecast, freq=freq, name="date")
         s_date = pd.Series(i_date)
 
         # Get days passed since date_start, then add x_start_actuals
@@ -205,23 +184,18 @@ def get_s_x_extrapolate(
     else:
         # Otherwise, use numeric index
         # we extrapolate future samples equal to 100*extrapolate_years
-        index = pd.Index(
-            np.arange(
-                date_start_actuals,
-                date_end_actuals +
-                100 *
-                extrapolate_years))
-        s_x = pd.Series(
-            index=index,
-            data=np.arange(
-                x_start_actuals,
-                x_start_actuals + index.size)) + x_start_actuals
+        index = pd.Index(np.arange(date_start_actuals, date_end_actuals + 100 * extrapolate_years))
+        s_x = (
+            pd.Series(index=index, data=np.arange(x_start_actuals, x_start_actuals + index.size))
+            + x_start_actuals
+        )
     if model_requires_scaling(model):
         s_x = s_x / scaling_factor
     return s_x
 
 
 # Forecast Selection Functions
+
 
 def get_aic_c(fit_error, n, n_params):
     """
@@ -260,11 +234,12 @@ def get_aic_c(fit_error, n, n_params):
     if (n <= n_params + 1) or (n == 0):
         aux = n - n_params - 1
         raise ValueError(
-            'ERROR: Time series too short for AIC_C: (n = ' +
-            str(n) +
-            ', n - n_params - 1 = ' +
-            str(aux) +
-            ')')
+            "ERROR: Time series too short for AIC_C: (n = "
+            + str(n)
+            + ", n - n_params - 1 = "
+            + str(aux)
+            + ")"
+        )
     elif fit_error == 0.0:
         if n_params == 1:
             aicc = -float("inf")
@@ -272,14 +247,20 @@ def get_aic_c(fit_error, n, n_params):
             # This can lead to suboptimal model selection when we have
             # multiple perfect fits - we use a patch instead
             # aicc = -float("inf")
-            fit_error = 10 ** -320
-            aicc = n * math.log(fit_error / n) + 2 * n_params + \
-                (2 * n_params * (n_params + 1) / (n - n_params - 1))
+            fit_error = 10**-320
+            aicc = (
+                n * math.log(fit_error / n)
+                + 2 * n_params
+                + (2 * n_params * (n_params + 1) / (n - n_params - 1))
+            )
 
     else:
         # Actual calculation of the AICc
-        aicc = n * math.log(fit_error / n) + 2 * n_params + \
-            (2 * n_params * (n_params + 1) / (n - n_params - 1))
+        aicc = (
+            n * math.log(fit_error / n)
+            + 2 * n_params
+            + (2 * n_params * (n_params + 1) / (n - n_params - 1))
+        )
 
     return aicc
 
@@ -298,8 +279,14 @@ def get_s_aic_c_best_result_key(s_aic_c):
 
 
 def detect_freq(a_date):
+    """
+    Detect the frequency of a date series.
+
+    Returns modern pandas frequency strings (h, ME, QE, YE) instead of
+    deprecated aliases (H, M, Q, Y).
+    """
     if isinstance(a_date, pd.DataFrame):
-        if 'date' not in a_date.columns:
+        if "date" not in a_date.columns:
             return None
         else:
             a_date = a_date.date
@@ -307,72 +294,71 @@ def detect_freq(a_date):
     min_date_delta = s_date.diff().min()
     if pd.isnull(min_date_delta):
         return None
-    elif min_date_delta == pd.Timedelta(1, unit='h'):
-        return 'H'
-    elif min_date_delta == pd.Timedelta(7, unit='D'):
+    elif min_date_delta == pd.Timedelta(1, unit="h"):
+        return "h"
+    elif min_date_delta == pd.Timedelta(7, unit="D"):
         # Weekly seasonality - need to determine day of week
         min_date_wday = s_date.min().weekday()
-        return dict_wday_name.get(min_date_wday, 'W')
-    elif min_date_delta >= pd.Timedelta(28, unit='d') and \
-            min_date_delta <= pd.Timedelta(31, unit='d'):
-        # MS is month start, M is month end. We use MS if all dates match first
+        return dict_wday_name.get(min_date_wday, "W")
+    elif min_date_delta >= pd.Timedelta(28, unit="d") and min_date_delta <= pd.Timedelta(
+        31, unit="d"
+    ):
+        # MS is month start, ME is month end. We use MS if all dates match first
         # of month
         if s_date.dt.day.max() == 1:
-            return 'MS'
+            return "MS"
         else:
-            return 'M'
-    elif min_date_delta >= pd.Timedelta(89, unit='d') and \
-            min_date_delta <= pd.Timedelta(92, unit='d'):
-        return 'Q'
-    elif min_date_delta >= pd.Timedelta(365, unit='d') and \
-            min_date_delta <= pd.Timedelta(366, unit='d'):
-        # YS is month start, Y is month end. We use MS if all dates match first
-        # of month
+            return "ME"
+    elif min_date_delta >= pd.Timedelta(89, unit="d") and min_date_delta <= pd.Timedelta(
+        92, unit="d"
+    ):
+        return "QE"
+    elif min_date_delta >= pd.Timedelta(365, unit="d") and min_date_delta <= pd.Timedelta(
+        366, unit="d"
+    ):
+        # YS is year start, YE is year end. We use YS if all dates match first
+        # of year
         if s_date.dt.day.max() == 1 and s_date.dt.month.max() == 1:
-            return 'YS'
+            return "YS"
         else:
-            return 'Y'
-    elif min_date_delta >= pd.Timedelta(23, unit='h'):
+            return "YE"
+    elif min_date_delta >= pd.Timedelta(23, unit="h"):
         # and min_date_delta <= pd.Timedelta(1, unit='d')\
-        return 'D'
+        return "D"
     else:
         return None
 
 
 def interpolate_df(df, include_mask=False, interpolate_y=True):
     # In a dataframe with date gaps, replace x-axis gaps with interpolation
-    if 'date' not in df.columns:  # interpolate by x column
+    if "date" not in df.columns:  # interpolate by x column
         if df.x.drop_duplicates().diff().nunique() <= 1:  # Regular intervals - no gaps
             return df
         else:
             # With duplicate samples, gap filling not supported
             if df.x.duplicated().any():
-                raise ValueError(
-                    'Cannot fill gaps on series with multiple '
-                    'samples per x')
+                raise ValueError("Cannot fill gaps on series with multiple samples per x")
             df_result = (
-                df.set_index('x')
-                    .reindex(
-                    pd.RangeIndex(df.x.min(), df.x.max() + 1, name='x'))
-                    .pipe(lambda x: x.interpolate() if interpolate_y else x)
-                    .reset_index()
+                df.set_index("x")
+                .reindex(pd.RangeIndex(df.x.min(), df.x.max() + 1, name="x"))
+                .pipe(lambda x: x.interpolate() if interpolate_y else x)
+                .reset_index()
             )
 
-    else:   # df has date column - interpolate by date
+    else:  # df has date column - interpolate by date
         s_date_diff = df.date.drop_duplicates().diff()
         if s_date_diff.pipe(pd.isnull).all():
             s_date_diff_first = None
         else:
-            s_date_diff_first = s_date_diff.loc[s_date_diff.first_valid_index(
-            )]
+            s_date_diff_first = s_date_diff.loc[s_date_diff.first_valid_index()]
         freq = detect_freq(df)
         # If space between samples is constant, no interpolation is required
         # Exception: in sparse series with date gaps, we can randomly get
         # gaps that are constant but don't match any real period, e.g. 8 days
 
-        if s_date_diff.nunique() <= 1 and not \
-                (freq == 'D' and
-                 s_date_diff_first > pd.to_timedelta(1, 'day')):
+        if s_date_diff.nunique() <= 1 and not (
+            freq == "D" and s_date_diff_first > pd.to_timedelta(1, "day")
+        ):
             # TODO: Add additional check for
             #  e.g. 2-sample series with 8-day gap
             return df
@@ -381,74 +367,85 @@ def interpolate_df(df, include_mask=False, interpolate_y=True):
         # We need to check if there are duplicate samples
         # - if that is the case, we crash b.c. scenario not supported by asfreq
         if df.date.duplicated().any():
-            raise ValueError('Cannot fill gaps on series with multiple '
-                             'samples per date')
+            raise ValueError("Cannot fill gaps on series with multiple samples per date")
         df_result = (
-            df.set_index('date')
-                .asfreq(freq)
-                .pipe(lambda x: x.interpolate() if interpolate_y else x)
-                .reset_index()
+            df.set_index("date")
+            .asfreq(freq)
+            .pipe(lambda x: x.interpolate() if interpolate_y else x)
+            .reset_index()
         )
-    if 'x' in df.columns:
-        df_result['x'] = df_result['x'].interpolate().astype(df.x.dtype)
+    if "x" in df.columns:
+        df_result["x"] = df_result["x"].interpolate().astype(df.x.dtype)
         if include_mask:
-            df_result['is_gap_filled'] = ~df_result.x.isin(df.x)
+            df_result["is_gap_filled"] = ~df_result.x.isin(df.x)
     return df_result
 
 
 # Functions to check for multiplicative/additive model composition
 def _fit_linear(df):
     """Fit linear model based on df"""
-    from anticipy.forecast import fit_model, extrapolate_model
+    from anticipy.forecast import extrapolate_model, fit_model
     from anticipy.forecast_models import model_linear
 
-    assert df.index.size >= 4, 'Linear model requires 4+ samples'
+    assert df.index.size >= 4, "Linear model requires 4+ samples"
     dict_result = fit_model(model_linear, df)
-    params = dict_result.get('metadata').params.iloc[0]
+    params = dict_result.get("metadata").params.iloc[0]
     df_pred = extrapolate_model(
-        model_linear, params, df.x.min(), df.x.max() + 1,
-        extrapolate_years=0)
+        model_linear, params, df.x.min(), df.x.max() + 1, extrapolate_years=0
+    )
 
-    df_out = (
-        df.merge(
-            df_pred
-                .rename(columns=dict(y='y_pred'))
-                # RENAME AXIS ONLY WORKS FOR NUMERIC SERIES
-                #  - TIME SERIES WOULD BE DATE
-                .rename_axis('x')
-                .reset_index(),
-            how='left')
+    df_out = df.merge(
+        df_pred.rename(columns=dict(y="y_pred"))
+        # RENAME AXIS ONLY WORKS FOR NUMERIC SERIES
+        #  - TIME SERIES WOULD BE DATE
+        .rename_axis("x")
+        .reset_index(),
+        how="left",
     )
     return df_out
 
 
-def _get_mult_sum_stats(df, freq='M'):
+def _normalize_resample_freq(freq: str) -> str:
+    mapping = {
+        "M": "ME",
+        "Q": "QE",
+        "Y": "YE",
+        "H": "h",
+    }
+    freq_upper = freq.upper()
+    return mapping.get(freq_upper, freq)
+
+
+def _get_mult_sum_stats(df, freq="M"):
     """
     - fit linear model
     - then look at stats of residuals, to check for multiplicative composition
     """
+    freq_norm = _normalize_resample_freq(freq)
     # Fit linear model, get residuals
     df_pred = _fit_linear(df)
     df_res = df_pred.assign(res=df_pred.y_pred - df_pred.y)
 
     # Get statistics from residuals
     df_mean = (
-        df_res
-            .set_index('date').y
-            .resample(freq).agg([np.mean]).rename(columns=dict(mean='y_mean'))
+        df_res.set_index("date")
+        .y.resample(freq_norm)
+        .agg(["mean"])
+        .rename(columns={"mean": "y_mean"})
     )
     df_res_var = (
-        df_res
-            .set_index('date').res
-            .resample(freq).agg([np.var]).rename(columns=dict(var='res_var'))
+        df_res.set_index("date")
+        .res.resample(freq_norm)
+        .agg(["var"])
+        .rename(columns={"var": "res_var"})
     )
     df_out = df_mean.join(df_res_var)
 
-    df_out['corr_mean_to_var'] = df_out.res_var.corr(df_out.y_mean)
+    df_out["corr_mean_to_var"] = df_out.res_var.corr(df_out.y_mean)
     return df_out.reset_index()
 
 
-def is_multiplicative(df, freq='M'):
+def is_multiplicative(df, freq="M"):
     """
     For an input time series, check if model composition
     should be multiplicative.
@@ -468,13 +465,13 @@ def is_multiplicative(df, freq='M'):
     """
     if (df.y <= 0).any():
         return False
-    if 'date' not in df.columns:
+    if "date" not in df.columns:
         return False
-    if (df.date.max() - df.date.min()) < pd.Timedelta('60 days'):
+    if (df.date.max() - df.date.min()) < pd.Timedelta("60 days"):
         return False
     # Check for series size
     df_filtered = df.loc[~df.y.pipe(pd.isna)]
-    if 'weight' in df_filtered.columns:
+    if "weight" in df_filtered.columns:
         df_filtered = df_filtered.loc[df_filtered.weight > 0]
     if df_filtered.index.size < 4:  # Not enough samples to fit a linear model
         return False

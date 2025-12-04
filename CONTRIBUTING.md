@@ -14,6 +14,13 @@ changes need some adjustment before they are ready for submission.
 3. You may merge the Pull Request in once you have the sign-off of two other developers, or if you 
    do not have permission to do that, you may request the second reviewer to merge it for you.
 
+## Local development
+
+- Target Python 3.10 or newer.
+- Install with development extras: `pip install -e .[dev,extras]`.
+- Run static checks before opening a pull request: `ruff check .` and `vulture anticipy tests`.
+- Add tests for behavioural changes and run `pytest`.
+
 ## Contributor Code of Conduct
 
 As contributors and maintainers of this project, and in the interest of fostering an open and 

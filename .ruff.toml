@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py310"
+src = ["anticipy"]
+extend-exclude = ["docs", ".asv", "tests", "benchmarks"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E203"]
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+"anticipy/__init__.py" = ["F401"]

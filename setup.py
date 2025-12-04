@@ -1,53 +1,66 @@
-from setuptools import setup, find_packages
+from pathlib import Path
 
-__version__ = "0.2.1"
+from setuptools import find_packages, setup
 
-# -- Edit Start
-zip_safe = False
-
-modules = []
-
-dependencies = [
-    'numpy>=1.15.1',
-    'pandas>=0.23.0',
-    'scipy>=1.0.0',
-    'plotly>=3.5.0'
+# Configuration
+PACKAGE_NAME = "anticipy-sawyer"
+PACKAGE_VERSION = "0.2.2"
+PYTHON_REQUIRES = ">=3.10"
+README_PATH = Path("README.md")
+ZIP_SAFE = False
+MODULES: list[str] = []
+DEPENDENCIES = [
+    "numpy>=2.0.0",
+    "pandas>=2.2.3",
+    "scipy>=1.14.0",
+    "plotly>=5.22.0",
 ]
-
-extras_require = {
-    'extras': ['matplotlib>=2.2.3', 'ipython>=5.8.0',
-               'notebook>=5.3', 'ipywidgets==7.5']
+EXTRAS_REQUIRE = {
+    "extras": [
+        "matplotlib>=3.8.0",
+        "ipython>=8.0.0",
+        "notebook>=7.0.0",
+        "ipywidgets>=8.1.2",
+    ],
+    "dev": [
+        "ruff>=0.4.0",
+        "vulture>=2.13",
+        "pytest>=8.0.0",
+        "pytest-html>=4.0.0",
+        "pytest-cov>=4.0.0",
+    ],
+}
+ENTRY_POINTS = {
+    "console_scripts": ["anticipy-forecast=anticipy.app:main"],
 }
 
-dependency_links = [
-]
 
-entry_points = {
-    "console_scripts": ['forecast = nsa.forecast.app:main']
-}
-# -- Edit Stop
-
-
-with open("PKG-INFO", "r") as fh:
-    long_description = fh.read()
+LONG_DESCRIPTION = README_PATH.read_text(encoding="utf-8")
 
 setup(
-    name="anticipy",
-    version=__version__,
-    description="Forecasting tools",
-    long_description=long_description,
+    name=PACKAGE_NAME,
+    version=PACKAGE_VERSION,
+    description="Fork of Anticipy forecasting tools",
+    long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     author="Pedro Capelastegui",
     author_email="pedro.capelastegui@sky.uk",
-    url="https://github.com/sky-uk/anticipy",
+    maintainer="James Sawyer",
+    url="https://github.com/jamessawyer/anticipy",
     license="BSD",
-    packages=find_packages(),
-    py_modules=modules,
+    packages=find_packages(exclude=("tests", "benchmarks", "docs")),
+    py_modules=MODULES,
     include_package_data=True,
-    install_requires=dependencies,
-    dependency_links=dependency_links,
-    zip_safe=zip_safe,
-    entry_points=entry_points,
-    classifiers=["License :: OSI Approved :: BSD License"],
-    extras_require=extras_require
+    install_requires=DEPENDENCIES,
+    python_requires=PYTHON_REQUIRES,
+    zip_safe=ZIP_SAFE,
+    entry_points=ENTRY_POINTS,
+    extras_require=EXTRAS_REQUIRE,
+    classifiers=[
+        "License :: OSI Approved :: BSD License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+    ],
 )

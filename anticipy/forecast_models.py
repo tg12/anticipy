@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # License:          This module is released under the terms of the LICENSE file
 #                   contained within this applications INSTALL directory
@@ -9,83 +8,56 @@ forecast model fitting, as well as their number of parameters and
 initialisation parameters.
 """
 
-# -- Coding Conventions
-#    http://www.python.org/dev/peps/pep-0008/   -   Use the Python style guide
-# http://sphinx.pocoo.org/rest.html          -   Use Restructured Text for
-# docstrings
+from __future__ import annotations
 
-
-# -- Public Imports
 import itertools
 import logging
-import numpy as np
-import pandas as pd
-from pandas.tseries.holiday import Holiday, AbstractHolidayCalendar, \
-    MO, nearest_workday, next_monday, next_monday_or_tuesday, \
-    GoodFriday, EasterMonday, USFederalHolidayCalendar
-from pandas.tseries.offsets import DateOffset
 from datetime import datetime
 
-# -- Private Imports
-from anticipy import model_utils
+import numpy as np
+import pandas as pd
+from pandas.tseries.holiday import (MO, AbstractHolidayCalendar, EasterMonday,
+                                    GoodFriday, Holiday,
+                                    USFederalHolidayCalendar, next_monday,
+                                    next_monday_or_tuesday)
+from pandas.tseries.offsets import DateOffset
 
-# -- Globals
 logger = logging.getLogger(__name__)
 
 # Fourier model configuration
 _dict_fourier_config = {  # Default configuration for fourier-based models
-    'period': 365.25,  # days in year
-    'harmonics': 10  # TODO: evaluate different harmonics values
+    "period": 365.25,  # days in year
+    "harmonics": 10,  # TODO: evaluate different harmonics values
 }
 _FOURIER_PERIOD = 365.25
 _FOURIER_HARMONICS = 10  # TODO: evaluate different harmonics values
-_FOURIER_K = (2.0 * np.pi / _FOURIER_PERIOD)
+_FOURIER_K = 2.0 * np.pi / _FOURIER_PERIOD
 _FOURIER_I = np.arange(1, _FOURIER_HARMONICS + 1)
 _FOURIER_DATE_ORIGIN = datetime(1970, 1, 1)
-
-
-# -- Functions
-
-# ---- Utility functions
-
-
-def logger_info(msg, data):
-    # Convenience function for easier log typing
-    logger.info(msg + '\n%s', data)
 
 
 def _get_f_init_params_default(n_params):
     # Generate a default function for initialising model parameters: use
     # random values between 0 and 1
-    return lambda a_x=None, a_y=None, a_date=None, is_mult=False:\
-        np.random.uniform(low=0.001, high=1, size=n_params)
+    return lambda a_x=None, a_y=None, a_date=None, is_mult=False: np.random.uniform(
+        low=0.001, high=1, size=n_params
+    )
 
 
 def _get_f_bounds_default(n_params):
     # Generate a default function for model parameter boundaries. Default
     # boundaries are (-inf, inf)
-    return lambda a_x=None, a_y=None, a_date=None: (
-        n_params * [-np.inf], n_params * [np.inf])
+    return lambda a_x=None, a_y=None, a_date=None: (n_params * [-np.inf], n_params * [np.inf])
 
 
 def _get_f_add_2_f_models(forecast_model1, forecast_model2):
     # Add model functions of 2 ForecastModels
     def f_add_2_f_models(a_x, a_date, params, is_mult=False, **kwargs):
-        params1 = params[0:forecast_model1.n_params]
-        params2 = params[forecast_model1.n_params:]
-        return (
-            forecast_model1.f_model(
-                a_x,
-                a_date,
-                params1,
-                is_mult=False,
-                **kwargs) +
-            forecast_model2.f_model(
-                a_x,
-                a_date,
-                params2,
-                is_mult=False,
-                **kwargs))
+        params1 = params[0 : forecast_model1.n_params]
+        params2 = params[forecast_model1.n_params :]
+        return forecast_model1.f_model(
+            a_x, a_date, params1, is_mult=False, **kwargs
+        ) + forecast_model2.f_model(a_x, a_date, params2, is_mult=False, **kwargs)
 
     return f_add_2_f_models
 
@@ -93,21 +65,11 @@ def _get_f_add_2_f_models(forecast_model1, forecast_model2):
 def _get_f_mult_2_f_models(forecast_model1, forecast_model2):
     # Multiply model functions of 2 ForecastModels
     def f_mult_2_f_models(a_x, a_date, params, is_mult=False, **kwargs):
-        params1 = params[0:forecast_model1.n_params]
-        params2 = params[forecast_model1.n_params:]
-        return (
-            forecast_model1.f_model(
-                a_x,
-                a_date,
-                params1,
-                is_mult=True,
-                **kwargs) *
-            forecast_model2.f_model(
-                a_x,
-                a_date,
-                params2,
-                is_mult=True,
-                **kwargs))
+        params1 = params[0 : forecast_model1.n_params]
+        params2 = params[forecast_model1.n_params :]
+        return forecast_model1.f_model(
+            a_x, a_date, params1, is_mult=True, **kwargs
+        ) * forecast_model2.f_model(a_x, a_date, params2, is_mult=True, **kwargs)
 
     return f_mult_2_f_models
 
@@ -117,8 +79,11 @@ def _get_f_add_2_f_init_params(f_init_params1, f_init_params2):
     # addition
     def f_add_2_f_init_params(a_x, a_y, a_date=None, is_mult=False):
         return np.concatenate(
-            [f_init_params1(a_x, a_y, a_date, is_mult=False),
-             f_init_params2(a_x, a_y, a_date, is_mult=False)])
+            [
+                f_init_params1(a_x, a_y, a_date, is_mult=False),
+                f_init_params2(a_x, a_y, a_date, is_mult=False),
+            ]
+        )
 
     return f_add_2_f_init_params
 
@@ -128,8 +93,11 @@ def _get_f_mult_2_f_init_params(f_init_params1, f_init_params2):
     # multiplication
     def f_mult_2_f_init_params(a_x, a_y, a_date=None, is_mult=False):
         return np.concatenate(
-            [f_init_params1(a_x, a_y, a_date, is_mult=True),
-             f_init_params2(a_x, a_y, a_date, is_mult=True)])
+            [
+                f_init_params1(a_x, a_y, a_date, is_mult=True),
+                f_init_params2(a_x, a_y, a_date, is_mult=True),
+            ]
+        )
 
     return f_mult_2_f_init_params
 
@@ -138,9 +106,12 @@ def _get_f_concat_2_bounds(forecast_model1, forecast_model2):
     # Compose parameter boundary functions of 2 ForecastModels
     def f_add_2_f_bounds(a_x, a_y, a_date=None):
         return np.concatenate(
-            (forecast_model1.f_bounds(
-                a_x, a_y, a_date), forecast_model2.f_bounds(
-                a_x, a_y, a_date)), axis=1)
+            (
+                forecast_model1.f_bounds(a_x, a_y, a_date),
+                forecast_model2.f_bounds(a_x, a_y, a_date),
+            ),
+            axis=1,
+        )
 
     return f_add_2_f_bounds
 
@@ -151,8 +122,8 @@ def _f_validate_input_default(a_x, a_y, a_date):
     return True
 
 
-def _as_list(l):
-    return l if isinstance(l, (list,)) else [l]
+def _as_list(value):
+    return value if isinstance(value, list) else [value]
 
 
 # Functions used to initialize cache variables in a ForecastModel
@@ -179,11 +150,12 @@ def _f_init_cache_a_t_fourier(a_x, a_date):
 _dict_f_cache = dict(
     a_month=_f_init_cache_a_month,
     a_weekday=_f_init_cache_a_weekday,
-    a_t_fourier=_f_init_cache_a_t_fourier
+    a_t_fourier=_f_init_cache_a_t_fourier,
 )
 
 
 # -- Classes
+
 
 class ForecastModel:
     """
@@ -309,7 +281,7 @@ class ForecastModel:
         # Get model output
         y = f_model(a_x, a_date, parameters)
 
-    The following pre-generated models are available. They are available as attributes from this module: # noqa
+    The following pre-generated models are available as module attributes:
 
     .. csv-table:: Forecast models
        :header: "name", "params", "formula","notes"
@@ -345,15 +317,15 @@ class ForecastModel:
     """
 
     def __init__(
-            self,
-            name,
-            n_params,
-            f_model,
-            f_init_params=None,
-            f_bounds=None,
-            l_f_validate_input=None,
-            l_cache_vars=None,
-            dict_f_cache=None,
+        self,
+        name,
+        n_params,
+        f_model,
+        f_init_params=None,
+        f_bounds=None,
+        l_f_validate_input=None,
+        l_cache_vars=None,
+        dict_f_cache=None,
     ):
         """
         Create ForecastModel
@@ -401,10 +373,9 @@ class ForecastModel:
         # TODO - REMOVE THIS - ASSUME NORMALIZED INPUT
         def _get_f_init_params_validated(f_init_params):
             # Adds argument validation to a parameter initialisation function
-            def f_init_params_validated(
-                    a_x=None, a_y=None, a_date=None, is_mult=False):
+            def f_init_params_validated(a_x=None, a_y=None, a_date=None, is_mult=False):
                 if a_x is not None and pd.isnull(a_x).any():
-                    raise ValueError('a_x cannot have null values')
+                    raise ValueError("a_x cannot have null values")
                 return f_init_params(a_x, a_y, a_date, is_mult)
 
             return f_init_params_validated
@@ -420,27 +391,24 @@ class ForecastModel:
         return self.name
 
     def __repr__(self):
-        return 'ForecastModel:{}'.format(self.name)
+        return f"ForecastModel:{self.name}"
 
     def __add__(self, forecast_model):
         # Check for nulls
-        if self.name == 'null':
+        if self.name == "null":
             return forecast_model
-        if forecast_model.name == 'null':
+        if forecast_model.name == "null":
             return self
-        name = '({}+{})'.format(self.name, forecast_model.name)
+        name = f"({self.name}+{forecast_model.name})"
         n_params = self.n_params + forecast_model.n_params
         f_model = _get_f_add_2_f_models(self, forecast_model)
-        f_init_params = _get_f_add_2_f_init_params(
-            self.f_init_params, forecast_model.f_init_params)
+        f_init_params = _get_f_add_2_f_init_params(self.f_init_params, forecast_model.f_init_params)
         f_bounds = _get_f_concat_2_bounds(self, forecast_model)
-        l_f_validate_input = list(
-            set(self.l_f_validate_input + forecast_model.l_f_validate_input))
+        l_f_validate_input = list(set(self.l_f_validate_input + forecast_model.l_f_validate_input))
         # Combine both dicts
         dict_f_cache = self.dict_f_cache.copy()
         dict_f_cache.update(forecast_model.dict_f_cache)
-        l_cache_vars = list(
-            set(self.l_cache_vars + forecast_model.l_cache_vars))
+        l_cache_vars = list(set(self.l_cache_vars + forecast_model.l_cache_vars))
         return ForecastModel(
             name,
             n_params,
@@ -449,30 +417,29 @@ class ForecastModel:
             f_bounds=f_bounds,
             l_f_validate_input=l_f_validate_input,
             l_cache_vars=l_cache_vars,
-            dict_f_cache=dict_f_cache
+            dict_f_cache=dict_f_cache,
         )
 
     def __radd__(self, other):
         return self.__add__(other)
 
     def __mul__(self, forecast_model):
-        if self.name == 'null':
+        if self.name == "null":
             return forecast_model
-        if forecast_model.name == 'null':
+        if forecast_model.name == "null":
             return self
-        name = '({}*{})'.format(self.name, forecast_model.name)
+        name = f"({self.name}*{forecast_model.name})"
         n_params = self.n_params + forecast_model.n_params
         f_model = _get_f_mult_2_f_models(self, forecast_model)
         f_init_params = _get_f_mult_2_f_init_params(
-            self.f_init_params, forecast_model.f_init_params)
+            self.f_init_params, forecast_model.f_init_params
+        )
         f_bounds = _get_f_concat_2_bounds(self, forecast_model)
-        l_f_validate_input = list(
-            set(self.l_f_validate_input + forecast_model.l_f_validate_input))
+        l_f_validate_input = list(set(self.l_f_validate_input + forecast_model.l_f_validate_input))
         # Combine both dicts
         dict_f_cache = self.dict_f_cache.copy()
         dict_f_cache.update(forecast_model.dict_f_cache)
-        l_cache_vars = list(
-            set(self.l_cache_vars + forecast_model.l_cache_vars))
+        l_cache_vars = list(set(self.l_cache_vars + forecast_model.l_cache_vars))
         return ForecastModel(
             name,
             n_params,
@@ -481,7 +448,7 @@ class ForecastModel:
             f_bounds=f_bounds,
             l_f_validate_input=l_f_validate_input,
             l_cache_vars=l_cache_vars,
-            dict_f_cache=dict_f_cache
+            dict_f_cache=dict_f_cache,
         )
 
     def __rmul__(self, other):
@@ -506,8 +473,8 @@ class ForecastModel:
 
     def validate_input(self, a_x, a_y, a_date):
         try:
-            l_result = [f_validate_input(a_x, a_y, a_date)
-                        for f_validate_input in self.l_f_validate_input]
+            for f_validate_input in self.l_f_validate_input:
+                f_validate_input(a_x, a_y, a_date)
         except AssertionError:
             return False
         return True
@@ -519,14 +486,14 @@ class ForecastModel:
             if f:
                 dict_cache_vars[k] = f(a_x, a_date)
             else:
-                logger.warning('Cache function not found: %s', k)
+                logger.warning("Cache function not found: %s", k)
         # Search vars defined in internal cache function dictionary
         for k in self.dict_f_cache:
             f = self.dict_f_cache.get(k)
             if f:
                 dict_cache_vars[k] = f(a_x, a_date)
             else:
-                logger.warning('Cache function not found: %s', k)
+                logger.warning("Cache function not found: %s", k)
         return dict_cache_vars
 
 
@@ -539,10 +506,11 @@ def _f_model_null(a_x, a_date, params, is_mult=False, **kwargs):
     return float(is_mult)  # Returns 1 if multiplying, 0 if adding
 
 
-model_null = ForecastModel('null', 0, _f_model_null)
+model_null = ForecastModel("null", 0, _f_model_null)
 
 
 # - Constant model: :math:`Y = A`
+
 
 def _f_model_constant(a_x, a_date, params, is_mult=False, **kwargs):
     [A] = params
@@ -557,11 +525,7 @@ def _f_init_params_constant(a_x=None, a_y=None, a_date=None, is_mult=False):
         return np.nanmean(a_y) + np.random.uniform(0, 1, 1)
 
 
-model_constant = ForecastModel(
-    'constant',
-    1,
-    _f_model_constant,
-    _f_init_params_constant)
+model_constant = ForecastModel("constant", 1, _f_model_constant, _f_init_params_constant)
 
 
 # - Naive model: Y = Y(x-1)
@@ -569,21 +533,16 @@ model_constant = ForecastModel(
 # regression. We still pass it to forecast.fit_model() for consistency
 # with the rest of the library
 
+
 def _f_model_naive(a_x, a_date, params, is_mult=False, df_actuals=None):
     if df_actuals is None:
-        raise ValueError('model_naive requires a df_actuals argument')
-    df_out_tmp = pd.DataFrame({'date': a_date, 'x': a_x})
+        raise ValueError("model_naive requires a df_actuals argument")
+    df_out_tmp = pd.DataFrame({"date": a_date, "x": a_x})
     df_out = (
         # This is not really intended to work with multiple values per sample
-        df_actuals.drop_duplicates('x')
-        .merge(df_out_tmp, how='outer')
-        .sort_values('x')
+        df_actuals.drop_duplicates("x").merge(df_out_tmp, how="outer").sort_values("x")
     )
-    df_out['y'] = (
-        df_out.y.shift(1)
-        .fillna(method='ffill')
-        .fillna(method='bfill')
-    )
+    df_out["y"] = df_out.y.shift(1).ffill().bfill()
     df_out = df_out.loc[df_out.x.isin(a_x)]
     # df_out = df_out_tmp.merge(df_out, how='left')
     # TODO: CHECK THAT X,DATE order is preserved
@@ -591,7 +550,7 @@ def _f_model_naive(a_x, a_date, params, is_mult=False, df_actuals=None):
     return df_out.y.values
 
 
-model_naive = ForecastModel('naive', 0, _f_model_naive)
+model_naive = ForecastModel("naive", 0, _f_model_naive)
 
 
 # - Seasonal naive model
@@ -599,72 +558,68 @@ model_naive = ForecastModel('naive', 0, _f_model_naive)
 # regression. We still pass it to forecast.fit_model() for consistency
 # with the rest of the library
 
+
 def _fillna_wday(df):
     """
     In a time series, shift samples by 1 week
-    and fill gaps with data from same weekday
+    and fill gaps with data from same weekday.
+
+    Returns NaN for samples where no previous week data is available for
+    that weekday.
     """
+    # Add weekday column
+    df = df.assign(wday=df.date.dt.weekday)
 
-    def add_col_y_out(df):
-        df = df.assign(y_out=df.y.shift(1).fillna(method='ffill'))
-        return df
-
-    df_out = (
-        df
-        .assign(wday=df.date.dt.weekday)
-        .groupby('wday', as_index=False).apply(add_col_y_out)
-        .sort_values(['x'])
-        .reset_index(drop=True)
+    # Shift within each weekday group and forward fill
+    df_out = df.copy()
+    df_out["y_out"] = (
+        df_out.sort_values("x").groupby("wday")["y"].transform(lambda grp: grp.shift(1).ffill())
     )
-    return df_out
+
+    return df_out.sort_values(["x"]).reset_index(drop=True)
 
 
 def _f_model_snaive_wday(a_x, a_date, params, is_mult=False, df_actuals=None):
     """Naive model - takes last valid weekly sample"""
     if df_actuals is None:
-        raise ValueError('model_snaive_wday requires a df_actuals argument')
+        raise ValueError("model_snaive_wday requires a df_actuals argument")
 
     # df_actuals_model - table with actuals samples,
     #  adding y_out column with naive model values
-    df_actuals_model = _fillna_wday(df_actuals.drop_duplicates('x'))
+    df_actuals_model = _fillna_wday(df_actuals.drop_duplicates("x"))
 
     # df_last_week - table with naive model values from last actuals week,
     #  to use in extrapolation
     df_last_week = (
         df_actuals_model
         # Fill null actual values with data from previous weeks
-        .assign(y=df_actuals_model.y.fillna(df_actuals_model.y_out))
-        .drop_duplicates('wday', keep='last')
-        [['wday', 'y']]
-        .rename(columns=dict(y='y_out'))
+        .assign(y=df_actuals_model.y.fillna(df_actuals_model.y_out).fillna(0.0))
+        .drop_duplicates("wday", keep="last")[["wday", "y"]]
+        .rename(columns=dict(y="y_out"))
     )
 
     # Generate table with extrapolated samples
-    df_out_tmp = pd.DataFrame({'date': a_date, 'x': a_x})
-    df_out_tmp['wday'] = df_out_tmp.date.dt.weekday
+    df_out_tmp = pd.DataFrame({"date": a_date, "x": a_x})
+    df_out_tmp["wday"] = df_out_tmp.date.dt.weekday
     df_out_extrapolated = (
-        df_out_tmp
-        .loc[~df_out_tmp.date.isin(df_actuals_model.date)]
-        .merge(df_last_week, how='left')
-        .sort_values('x')
+        df_out_tmp.loc[~df_out_tmp.date.isin(df_actuals_model.date)]
+        .merge(df_last_week, how="left")
+        .sort_values("x")
     )
     # Filter actuals table - only samples in a_x, a_date
     df_out_actuals_filtered = (
         # df_actuals_model.loc[df_actuals_model.x.isin(a_x)]
         # Using merge rather than simple filtering to account for
         #  dates with multiple samples
-        df_actuals_model.merge(df_out_tmp, how='inner')
-        .sort_values('x')
+        df_actuals_model.merge(df_out_tmp, how="inner").sort_values("x")
     )
-    df_out = (
-        pd.concat(
-            [df_out_actuals_filtered, df_out_extrapolated],
-            sort=False, ignore_index=True)
+    df_out = pd.concat(
+        [df_out_actuals_filtered, df_out_extrapolated], sort=False, ignore_index=True
     )
     return df_out.y_out.values
 
 
-model_snaive_wday = ForecastModel('snaive_wday', 0, _f_model_snaive_wday)
+model_snaive_wday = ForecastModel("snaive_wday", 0, _f_model_snaive_wday)
 
 
 # - Spike model: :math:`Y = A`, when x_min <= X < x_max
@@ -674,41 +629,34 @@ def _f_model_spike(a_x, a_date, params, is_mult=False, **kwargs):
         c = 1
     else:
         c = 0
-    y = np.concatenate((
-        np.full(int(x_min), c),
-        np.full(int(x_max - x_min), A),
-        np.full(len(a_x) - int(x_max), c)
-    ))
+    y = np.concatenate(
+        (np.full(int(x_min), c), np.full(int(x_max - x_min), A), np.full(len(a_x) - int(x_max), c))
+    )
     return y
 
 
 def _f_init_params_spike(a_x=None, a_y=None, a_date=None, is_mult=False):
-    """ params are spike height, x start, x end """
-    # if not a_y.any():
+    """params are spike height, x start, x end"""
     if a_y is None:
-        return [1] + np.random.uniform(0, 1, 1) + [2]
-    else:
-        diffs = np.diff(a_y)
-        # if diffs:
-        if True:
-            diff = max(diffs)
-            x_start = np.argmax(diffs)
-            x_end = x_start + 1
-            return np.array([diff, x_start, x_end])
+        return np.array([1.0, 0.0, 1.0])
+
+    diffs = np.diff(a_y)
+    if diffs.size == 0:
+        return np.array([1.0, 0.0, 1.0])
+
+    diff = float(np.max(diffs))
+    x_start = int(np.argmax(diffs))
+    x_end = x_start + 1
+    return np.array([diff, x_start, x_end])
 
 
-model_spike = ForecastModel('spike', 3, _f_model_spike, _f_init_params_spike)
+model_spike = ForecastModel("spike", 3, _f_model_spike, _f_init_params_spike)
 
 
 # - Spike model for dates - dates are fixed for each model
 
-def _f_model_spike_date(
-        a_x,
-        a_date,
-        params,
-        date_start,
-        date_end,
-        is_mult=False):
+
+def _f_model_spike_date(a_x, a_date, params, date_start, date_end, is_mult=False):
     [A] = params
     mask_spike = (a_date >= date_start) * (a_date < date_end)
     if is_mult:
@@ -719,37 +667,41 @@ def _f_model_spike_date(
     return y
 
 
-def _f_init_params_spike(a_x=None, a_y=None, a_date=None, is_mult=False):
-    """ params are spike height, x start, x end """
+def _f_init_params_spike_date(a_x=None, a_y=None, a_date=None, is_mult=False):
+    """Parameter initialiser for date-based spikes."""
     if a_y is None:
-        return np.concatenate([np.array([1]) + np.random.uniform(0, 1, 1)])
-    else:
-        diffs = np.diff(a_y)
-        # if diffs:
-        if True:
-            diff = max(diffs)
-            return np.array([diff])
-        # else:
-        #     rand = np.random.randint(1, len(a_y) - 1)
-        #     return [1]
+        return np.array([1.0])
+
+    diffs = np.diff(a_y)
+    if diffs.size == 0:
+        return np.array([1.0])
+
+    diff = float(np.max(diffs))
+    return np.array([diff])
 
 
 def get_model_spike_date(date_start, date_end):
-    f_model = (
-        lambda a_x, a_date, params, is_mult=False, **kwargs:
-        _f_model_spike_date(a_x, a_date, params, date_start, date_end, is_mult)
-    )
+    def f_model(a_x, a_date, params, is_mult=False, **kwargs):
+        return _f_model_spike_date(
+            a_x,
+            a_date,
+            params,
+            date_start,
+            date_end,
+            is_mult,
+        )
+
     model_spike_date = ForecastModel(
-        'spike_date[{},{}]'.format(
-            pd.to_datetime(date_start).date(),
-            pd.to_datetime(date_end).date()),
+        f"spike_date[{pd.to_datetime(date_start).date()},{pd.to_datetime(date_end).date()}]",
         1,
         f_model,
-        _f_init_params_spike)
+        _f_init_params_spike_date,
+    )
     return model_spike_date
 
 
 # - Linear model: :math:`Y = A*x + B`
+
 
 def _f_model_linear(a_x, a_date, params, is_mult=False, **kwargs):
     (A, B) = params
@@ -771,18 +723,10 @@ def _f_init_params_linear(a_x=None, a_y=None, a_date=None, is_mult=False):
         return np.array([A, B])
 
 
-model_linear = ForecastModel(
-    'linear',
-    2,
-    _f_model_linear,
-    _f_init_params_linear)
+model_linear = ForecastModel("linear", 2, _f_model_linear, _f_init_params_linear)
 
 
-def f_init_params_linear_nondec(
-        a_x=None,
-        a_y=None,
-        a_date=None,
-        is_mult=False):
+def f_init_params_linear_nondec(a_x=None, a_y=None, a_date=None, is_mult=False):
     params = _f_init_params_linear(a_x, a_y, a_date)
     if params[0] < 0:
         params[0] = 0
@@ -794,12 +738,17 @@ def f_bounds_linear_nondec(a_x=None, a_y=None, a_date=None):
     return [0, -np.inf], [np.inf, np.inf]
 
 
-model_linear_nondec = ForecastModel('linear_nondec', 2, _f_model_linear,
-                                    f_init_params=f_init_params_linear_nondec,
-                                    f_bounds=f_bounds_linear_nondec)
+model_linear_nondec = ForecastModel(
+    "linear_nondec",
+    2,
+    _f_model_linear,
+    f_init_params=f_init_params_linear_nondec,
+    f_bounds=f_bounds_linear_nondec,
+)
 
 
 # - QuasiLinear model: :math:`Y = A t^{B} + C`
+
 
 def _f_model_quasilinear(a_x, a_date, params, is_mult=False, **kwargs):
     (A, B, C) = params
@@ -807,7 +756,7 @@ def _f_model_quasilinear(a_x, a_date, params, is_mult=False, **kwargs):
     return y
 
 
-model_quasilinear = ForecastModel('quasilinear', 3, _f_model_quasilinear)
+model_quasilinear = ForecastModel("quasilinear", 3, _f_model_quasilinear)
 
 
 # - Exponential model: math::  Y = A * B^t
@@ -818,7 +767,7 @@ def _f_model_exp(a_x, a_date, params, is_mult=False, **kwargs):
     return y
 
 
-model_exp = ForecastModel('exponential', 2, _f_model_exp)
+model_exp = ForecastModel("exponential", 2, _f_model_exp)
 
 
 # - Exponential decay model: math::  Y = A * e^(B*(x-C)) + D
@@ -847,10 +796,14 @@ def f_bounds_decay(a_x=None, a_y=None, a_date=None):
     return [-np.inf, -np.inf, -np.inf], [np.inf, 0, np.inf]
 
 
-model_decay = ForecastModel('decay', 3, _f_model_decay,
-                            f_init_params=f_init_params_decay,
-                            f_bounds=f_bounds_decay,
-                            l_f_validate_input=_f_validate_input_decay)
+model_decay = ForecastModel(
+    "decay",
+    3,
+    _f_model_decay,
+    f_init_params=f_init_params_decay,
+    f_bounds=f_bounds_decay,
+    l_f_validate_input=_f_validate_input_decay,
+)
 
 
 # - Step function: :math:`Y = {0, if x < A | B, if x >= A}`
@@ -873,21 +826,22 @@ def _f_init_params_step(a_x=None, a_y=None, a_date=None, is_mult=False):
     else:
         if a_y.ndim > 1:
             a_y = a_y[:, 0]
-        df = pd.DataFrame({'b': a_y})
+        df = pd.DataFrame({"b": a_y})
         # max difference between consecutive values
-        df['diff'] = df.diff().abs()
+        df["diff"] = df.diff().abs()
         # if is_mult, replace above line with something like
         # np.concatenate([[np.NaN],a_y[:-1]/a_y[1:]])
-        a = df.nlargest(1, 'diff').index[0]
-        b = df['diff'].iloc[a]
+        a = df.nlargest(1, "diff").index[0]
+        b = df["diff"].iloc[a]
         return np.array([a, b * 2])
 
 
 # TODO: Add boundaries for X axis
-model_step = ForecastModel('step', 2, _f_step, _f_init_params_step)
+model_step = ForecastModel("step", 2, _f_step, _f_init_params_step)
 
 
 # - Spike model for dates - dates are fixed for each model
+
 
 def _f_model_step_date(a_x, a_date, params, date_start, is_mult=False):
     [A] = params
@@ -908,24 +862,28 @@ def _f_init_params_step_date(a_x=None, a_y=None, a_date=None, is_mult=False):
     else:
         if a_y.ndim > 1:
             a_y = a_y[:, 0]
-        df = pd.DataFrame({'b': a_y})
+        df = pd.DataFrame({"b": a_y})
         # max difference between consecutive values
-        df['diff'] = df.diff().abs()
+        df["diff"] = df.diff().abs()
         # if is_mult, replace above line with something like
         # np.concatenate([[np.NaN],a_y[:-1]/a_y[1:]])
-        a = df.nlargest(1, 'diff').index[0]
-        b = df['diff'].iloc[a]
+        a = df.nlargest(1, "diff").index[0]
+        b = df["diff"].iloc[a]
         return np.array([b * 2])
 
 
 def get_model_step_date(date_start):
     date_start = pd.to_datetime(date_start)
-    f_model = (
-        lambda a_x, a_date, params, is_mult=False, **kwargs:
-        _f_model_step_date(a_x, a_date, params, date_start, is_mult)
+
+    def f_model(a_x, a_date, params, is_mult=False, **kwargs):
+        return _f_model_step_date(a_x, a_date, params, date_start, is_mult)
+
+    model_step_date = ForecastModel(
+        f"step_date[{date_start.date()}]",
+        1,
+        f_model,
+        _f_init_params_step_date,
     )
-    model_step_date = ForecastModel('step_date[{}]'.format(date_start.date()),
-                                    1, f_model, _f_init_params_step_date)
     return model_step_date
 
 
@@ -937,7 +895,7 @@ def _f_n_steps(n, a_x, a_date, params, is_mult=False):
         y = 0
 
     for i in range(0, n + 1, 2):
-        A, B = params[i: i + 2]
+        A, B = params[i : i + 2]
         if is_mult:
             y = y * _f_step(a_x, a_date, (A, B), is_mult)
         else:
@@ -946,32 +904,22 @@ def _f_n_steps(n, a_x, a_date, params, is_mult=False):
 
 
 def _f_two_steps(a_x, a_date, params, is_mult=False, **kwargs):
-    return _f_n_steps(
-        n=2,
-        a_x=a_x,
-        a_date=a_date,
-        params=params,
-        is_mult=is_mult)
+    return _f_n_steps(n=2, a_x=a_x, a_date=a_date, params=params, is_mult=is_mult)
 
 
-def _f_init_params_n_steps(
-        n=2,
-        a_x=None,
-        a_y=None,
-        a_date=None,
-        is_mult=False):
+def _f_init_params_n_steps(n=2, a_x=None, a_y=None, a_date=None, is_mult=False):
     if a_y is None:
         return np.random.uniform(0, 1, n * 2)
     else:
         # max difference between consecutive values
         if a_y.ndim > 1:
             a_y = a_y[:, 0]
-        df = pd.DataFrame({'b': a_y})
-        df['diff'] = df.diff().abs()
+        df = pd.DataFrame({"b": a_y})
+        df["diff"] = df.diff().abs()
         # if is_mult, replace above line with something like
         # np.concatenate([[np.NaN],a_y[:-1]/a_y[1:]])
-        a = df.nlargest(n, 'diff').index[0:n].values
-        b = df['diff'].iloc[a].values
+        a = df.nlargest(n, "diff").index[0:n].values
+        b = df["diff"].iloc[a].values
         params = []
         for i in range(0, n):
             params += [a[i], b[i]]
@@ -979,19 +927,10 @@ def _f_init_params_n_steps(
 
 
 def _f_init_params_two_steps(a_x=None, a_y=None, a_date=None, is_mult=False):
-    return _f_init_params_n_steps(
-        n=2,
-        a_x=a_x,
-        a_y=a_y,
-        a_date=a_date,
-        is_mult=is_mult)
+    return _f_init_params_n_steps(n=2, a_x=a_x, a_y=a_y, a_date=a_date, is_mult=is_mult)
 
 
-model_two_steps = ForecastModel(
-    'two_steps',
-    2 * 2,
-    _f_two_steps,
-    _f_init_params_two_steps)
+model_two_steps = ForecastModel("two_steps", 2 * 2, _f_two_steps, _f_init_params_two_steps)
 
 
 # - Sigmoid step function: `Y = {A + (B - A) / (1 + np.exp(- D * (a_x - C)))}`
@@ -1004,32 +943,28 @@ def _f_sigmoid(a_x, a_date, params, is_mult=False, **kwargs):
     else:
         A = 0
     # TODO check if a_x is negative
-    y = A + (B - A) / (1 + np.exp(- D * (a_x - C)))
+    y = A + (B - A) / (1 + np.exp(-D * (a_x - C)))
     return y
 
 
-def _f_init_params_sigmoid_step(
-        a_x=None,
-        a_y=None,
-        a_date=None,
-        is_mult=False):
+def _f_init_params_sigmoid_step(a_x=None, a_y=None, a_date=None, is_mult=False):
     if a_y is None:
         return np.random.uniform(0, 1, 3)
     else:
         if a_y.ndim > 1:
             a_y = a_y[:, 0]
-        df = pd.DataFrame({'y': a_y})
+        df = pd.DataFrame({"y": a_y})
         # max difference between consecutive values
-        df['diff'] = df.diff().abs()
-        c = df.nlargest(1, 'diff').index[0]
-        b = df.loc[c, 'y']
+        df["diff"] = df.diff().abs()
+        c = df.nlargest(1, "diff").index[0]
+        b = df.loc[c, "y"]
         d = b * b
         return b, c, d
 
 
 def _f_init_bounds_sigmoid_step(a_x=None, a_y=None, a_date=None):
     if a_y is None:
-        return [-np.inf, -np.inf, 0.], 3 * [np.inf]
+        return [-np.inf, -np.inf, 0.0], 3 * [np.inf]
 
     if a_y.ndim > 1:
         a_y = a_y[:, 0]
@@ -1040,26 +975,24 @@ def _f_init_bounds_sigmoid_step(a_x=None, a_y=None, a_date=None):
     b_max = 2 * diff
     c_min = min(a_x)
     c_max = max(a_x)
-    d_min = 0.
+    d_min = 0.0
     d_max = np.inf
     return [b_min, c_min, d_min], [b_max, c_max, d_max]
 
 
 # In this model, parameter initialization is aware of number of steps
 model_sigmoid_step = ForecastModel(
-    'sigmoid_step',
-    3,
-    _f_sigmoid,
-    _f_init_params_sigmoid_step,
-    f_bounds=_f_init_bounds_sigmoid_step)
+    "sigmoid_step", 3, _f_sigmoid, _f_init_params_sigmoid_step, f_bounds=_f_init_bounds_sigmoid_step
+)
 
-model_sigmoid = ForecastModel('sigmoid', 3, _f_sigmoid)
+model_sigmoid = ForecastModel("sigmoid", 3, _f_sigmoid)
 
 
 # Ramp functions - used for piecewise linear models
 
 # example : model_linear_pw2 = model_linear + model_ramp
 # example 2: model_linear_p23 = model_linear + model_ramp + model_ramp
+
 
 # - Ramp function: :math:`Y = {0, if x < A | B, if x >= A}`
 # A is the time of step, and B is the step
@@ -1082,29 +1015,26 @@ def _f_init_params_ramp(a_x=None, a_y=None, a_date=None, is_mult=False):
             a = np.random.uniform(0, 1, 1)
         b = np.random.uniform(0, 1, 1)
 
-        return np.concatenate([a,
-                               b])
+        return np.concatenate([a, b])
     else:
         # TODO: FILTER A_Y BY 20-80 PERCENTILE IN A_X
-        df = pd.DataFrame({'b': a_y})
+        df = pd.DataFrame({"b": a_y})
         if a_x is not None:
             #
-            df['x'] = a_x
+            df["x"] = a_x
             # Required because we support input with multiple samples per x
             # value
-            df = df.drop_duplicates('x')
-            df = df.set_index('x')
+            df = df.drop_duplicates("x")
+            df = df.set_index("x")
         # max difference between consecutive values -- this assumes no null
         # values in series
-        df['diff2'] = df.diff().diff().abs()
+        df["diff2"] = df.diff().diff().abs()
 
         # We ignore the last 15% of the time series
         skip_samples = int(np.ceil(df.index.size * 0.15))
 
-        a = (df.head(-skip_samples).tail(
-            -skip_samples).nlargest(1, 'diff2').index[0]
-        )
-        b = df['diff2'].loc[a]
+        a = df.head(-skip_samples).tail(-skip_samples).nlargest(1, "diff2").index[0]
+        b = df["diff2"].loc[a]
         # TODO: replace b with estimation of slope in segment 2
         #   minus slope in segment 1 - see init_params_linear
         return np.array([a, b])
@@ -1139,21 +1069,21 @@ def _f_init_bounds_ramp(a_x=None, a_y=None, a_date=None):
     return ([a_min, b_min], [a_max, b_max])
 
 
-model_ramp = ForecastModel(
-    'ramp',
-    2,
-    _f_ramp,
-    _f_init_params_ramp,
-    _f_init_bounds_ramp)
+model_ramp = ForecastModel("ramp", 2, _f_ramp, _f_init_params_ramp, _f_init_bounds_ramp)
 
 
 # - Weekday seasonality
 
+
 def _f_model_season_wday(
-        a_x, a_date, params, is_mult=False,
-        # cache variables
-        a_weekday=None,
-        **kwargs):
+    a_x,
+    a_date,
+    params,
+    is_mult=False,
+    # cache variables
+    a_weekday=None,
+    **kwargs,
+):
     # Weekday seasonality model, 6 params
     # params_long[0] is default series value,
     params_long = np.concatenate([[float(is_mult)], params])
@@ -1168,25 +1098,20 @@ def _f_validate_input_season_wday(a_x, a_y, a_date):
 
 
 model_season_wday = ForecastModel(
-    'season_wday',
+    "season_wday",
     6,
     _f_model_season_wday,
     l_f_validate_input=_f_validate_input_season_wday,
-    l_cache_vars=['a_weekday']
+    l_cache_vars=["a_weekday"],
 )
 
 
 # - Month seasonality
-def _f_init_params_season_month(
-        a_x=None,
-        a_y=None,
-        a_date=None,
-        is_mult=False):
+def _f_init_params_season_month(a_x=None, a_y=None, a_date=None, is_mult=False):
     if a_y is None or a_date is None:
         return np.random.uniform(low=-1, high=1, size=11)
     else:  # TODO: Improve this
-        l_params_long = [np.mean(a_y[a_date.month == i])
-                         for i in np.arange(1, 13)]
+        l_params_long = [np.mean(a_y[a_date.month == i]) for i in np.arange(1, 13)]
         l_baseline = l_params_long[-1]
         l_params = l_params_long[:-1]
         if not is_mult:
@@ -1198,10 +1123,14 @@ def _f_init_params_season_month(
 
 
 def _f_model_season_month(
-        a_x, a_date, params, is_mult=False,
-        # cache variables
-        a_month=None,
-        **kwargs):
+    a_x,
+    a_date,
+    params,
+    is_mult=False,
+    # cache variables
+    a_month=None,
+    **kwargs,
+):
     # Month of December is taken as default level, has no parameter
     # params_long[0] is default series value
     params_long = np.concatenate([[float(is_mult)], params])
@@ -1211,37 +1140,28 @@ def _f_model_season_month(
 
 
 model_season_month = ForecastModel(
-    'season_month',
-    11,
-    _f_model_season_month,
-    _f_init_params_season_month,
-    l_cache_vars=['a_month']
+    "season_month", 11, _f_model_season_month, _f_init_params_season_month, l_cache_vars=["a_month"]
 )
 
-model_season_month_old = ForecastModel(
-    'season_month_old', 11, _f_model_season_month)
+model_season_month_old = ForecastModel("season_month_old", 11, _f_model_season_month)
 
 
 def _f_model_yearly_season_fourier(
-        a_x,
-        a_date,
-        params,
-        is_mult=False,
-        # cache params
-        a_t_fourier=None,
-        **kwargs):
+    a_x,
+    a_date,
+    params,
+    is_mult=False,
+    # cache params
+    a_t_fourier=None,
+    **kwargs,
+):
     if a_t_fourier is None:
         a_t_fourier = _f_init_cache_a_t_fourier(None, a_date)
     y = np.matmul(params, a_t_fourier)
     return y
 
 
-def _f_init_params_fourier_n_params(
-        n_params,
-        a_x=None,
-        a_y=None,
-        a_date=None,
-        is_mult=False):
+def _f_init_params_fourier_n_params(n_params, a_x=None, a_y=None, a_date=None, is_mult=False):
     if a_y is None:
         params = np.random.uniform(0.001, 1, n_params)
     else:
@@ -1252,9 +1172,10 @@ def _f_init_params_fourier_n_params(
 
 
 def _f_init_params_fourier(a_x=None, a_y=None, a_date=None, is_mult=False):
-    n_params = 2 * _dict_fourier_config['harmonics']
+    n_params = 2 * _dict_fourier_config["harmonics"]
     return _f_init_params_fourier_n_params(
-        n_params, a_x=a_x, a_y=a_y, a_date=a_date, is_mult=is_mult)
+        n_params, a_x=a_x, a_y=a_y, a_date=a_date, is_mult=is_mult
+    )
 
 
 def _f_init_bounds_fourier_nparams(n_params, a_x=None, a_y=None, a_date=None):
@@ -1262,17 +1183,17 @@ def _f_init_bounds_fourier_nparams(n_params, a_x=None, a_y=None, a_date=None):
 
 
 def _f_init_bounds_fourier_yearly(a_x=None, a_y=None, a_date=None):
-    n_params = 2 * _dict_fourier_config['harmonics']
+    n_params = 2 * _dict_fourier_config["harmonics"]
     return _f_init_bounds_fourier_nparams(n_params, a_x, a_y, a_date)
 
 
 model_season_fourier_yearly = ForecastModel(
-    name='season_fourier_yearly',
-    n_params=2 * _dict_fourier_config.get('harmonics'),
+    name="season_fourier_yearly",
+    n_params=2 * _dict_fourier_config.get("harmonics"),
     f_model=_f_model_yearly_season_fourier,
     f_init_params=_f_init_params_fourier,
     f_bounds=_f_init_bounds_fourier_yearly,
-    l_cache_vars='a_t_fourier'
+    l_cache_vars="a_t_fourier",
 )
 
 
@@ -1281,13 +1202,15 @@ def get_fixed_model(forecast_model, params_fixed, is_mult=False):
     if forecast_model.n_params == 0:  # Nothing to do
         return forecast_model
     if len(params_fixed) != forecast_model.n_params:
-        err = 'Wrong number of fixed parameters'
+        err = "Wrong number of fixed parameters"
         raise ValueError(err)
     return ForecastModel(
-        forecast_model.name + '_fixed', 0,
-        f_model=lambda a_x, a_date, params, is_mult=is_mult, **kwargs:
-        forecast_model.f_model(
-            a_x=a_x, a_date=a_date, params=params_fixed, is_mult=is_mult))
+        forecast_model.name + "_fixed",
+        0,
+        f_model=lambda a_x, a_date, params, is_mult=is_mult, **kwargs: forecast_model.f_model(
+            a_x=a_x, a_date=a_date, params=params_fixed, is_mult=is_mult
+        ),
+    )
 
 
 def get_iqr_thresholds(s_diff, low=0.25, high=0.75):
@@ -1321,28 +1244,28 @@ def get_model_outliers(df, window=3):
     """
 
     dfo = df.copy()  # dfo - df for outliers
+    dfo = dfo.reset_index(drop=True)
     # If df has datetime index, use date logic in steps/spikes
-    with_dates = 'date' in df.columns
-    x_col = 'date' if with_dates else 'x'
+    with_dates = "date" in df.columns
+    x_col = "date" if with_dates else "x"
 
     if df[x_col].duplicated().any():
-        raise ValueError('Input cannot have multiple values per sample')
+        raise ValueError("Input cannot have multiple values per sample")
 
     # Get the differences
-    dfo['dif'] = dfo.y.diff()
+    dfo["dif"] = dfo.y.diff()
 
     # We consider as outliers the values that are
     # 1.5 * IQR (interquartile range) beyond the quartiles.
     # These thresholds are obtained here
     thr_low, thr_hi = get_iqr_thresholds(dfo.dif)
     # Now identify the changes
-    dfo['ischange'] = ((dfo.dif < thr_low) | (dfo.dif > thr_hi)).astype(int)
+    dfo["ischange"] = ((dfo.dif < thr_low) | (dfo.dif > thr_hi)).astype(int)
 
     # Whenever there are two or more consecutive changes
     # (that is, within `window` samples), we group them together
-    dfo['ischange_group'] = (
-        dfo.ischange.rolling(window, win_type=None, center=True).max().fillna(
-            0).astype(int)
+    dfo["ischange_group"] = (
+        dfo.ischange.rolling(window, win_type=None, center=True).max().fillna(0).astype(int)
     )
 
     # We now have to calculate the difference within the
@@ -1350,81 +1273,90 @@ def get_model_outliers(df, window=3):
     # result in a step, a spike, or both.
 
     # We get the filtered difference
-    dfo['dif_filt'] = (dfo.dif * dfo.ischange).fillna(0)
+    dfo["dif_filt"] = (dfo.dif * dfo.ischange).fillna(0)
     # And the absolute value of that
-    dfo['dif_filt_abs'] = dfo.dif_filt.abs()
+    dfo["dif_filt_abs"] = dfo.dif_filt.abs()
 
-    dfo['change_group'] = dfo.ischange_group.diff(
-    ).abs().fillna(0).astype(int).cumsum()
+    dfo["change_group"] = dfo.ischange_group.diff().abs().fillna(0).astype(int).cumsum()
 
     # this gets us the average difference of the outliers within each change
     # group
     df_mean_gdiff = (
-        dfo.loc[dfo.ischange.astype(bool)].groupby('change_group')[
-            'dif_filt'].mean().rename('mean_group_diff').reset_index())
+        dfo.loc[dfo.ischange.astype(bool)]
+        .groupby("change_group")["dif_filt"]
+        .mean()
+        .rename("mean_group_diff")
+        .reset_index()
+    )
     # this gets us the average absolute difference of the outliers within each
     # change group
     df_mean_gdiff_abs = (
-        dfo.loc[dfo.ischange.astype(bool)].groupby('change_group')[
-            'dif_filt_abs'].mean().rename(
-            'mean_group_diff_abs').reset_index()
+        dfo.loc[dfo.ischange.astype(bool)]
+        .groupby("change_group")["dif_filt_abs"]
+        .mean()
+        .rename("mean_group_diff_abs")
+        .reset_index()
     )
 
     # Merge the differences with the original dfo
     dfo = dfo.merge(
         df_mean_gdiff,
-        how='left').merge(
+        how="left",
+        on="change_group",
+    ).merge(
         df_mean_gdiff_abs,
-        how='left')
+        how="left",
+        on="change_group",
+    )
     # Fill missing values with zero -> no change
     dfo.mean_group_diff = dfo.mean_group_diff.fillna(0)
     dfo.mean_group_diff_abs = dfo.mean_group_diff_abs.fillna(0)
 
     # the change group is a step if the mean_group_diff exceeds the thresholds
-    dfo['is_step'] = dfo['ischange_group'] & (
-        ((dfo.mean_group_diff < thr_low) | (dfo.mean_group_diff > thr_hi)))
+    dfo["is_step"] = dfo["ischange_group"] & (
+        (dfo.mean_group_diff < thr_low) | (dfo.mean_group_diff > thr_hi)
+    )
 
     # the change group is a spike if the difference between the
     # mean_group_diff_abs and the average mean_group_diff exceeds
     # the average threshold value
-    dfo['is_spike'] = (dfo.mean_group_diff_abs -
-                       dfo.mean_group_diff.abs()) > (thr_hi - thr_low) / 2
+    dfo["is_spike"] = (dfo.mean_group_diff_abs - dfo.mean_group_diff.abs()) > (thr_hi - thr_low) / 2
+
+    if not dfo.ischange.any():
+        return np.full(dfo.index.size, False), np.full(dfo.index.size, False)
 
     # Get the outlier start and end points for each group
     df_outl = (
-        dfo.loc[dfo.ischange.astype(bool)].groupby('change_group').apply(
-            lambda x: pd.Series(
-                {'outl_start': x[x_col].iloc[0],
-                 'outl_end': x[x_col].iloc[-1]})).reset_index()
+        dfo.loc[dfo.ischange.astype(bool)]
+        .groupby("change_group")[x_col]
+        .agg(outl_start="first", outl_end="last")
+        .reset_index()
     )
 
-    if df_outl.empty:  # No outliers - nothing to do
-        return np.full(dfo.index.size, False), np.full(dfo.index.size, False)
-
-    dfo = dfo.merge(df_outl, how='left')
+    dfo = dfo.merge(df_outl, how="left", on="change_group")
     # Get the start and end points in dfo
     if with_dates:
         # Convert to datetime, if we are using dates
-        dfo['outl_start'] = pd.to_datetime(dfo.outl_start)
-        dfo['outl_end'] = pd.to_datetime(dfo.outl_end)
+        dfo["outl_start"] = pd.to_datetime(dfo.outl_start)
+        dfo["outl_end"] = pd.to_datetime(dfo.outl_end)
         # Create the mask for spikes and steps
-        dfo['mask_spike'] = (dfo['is_spike'] &
-                             (dfo.date >= pd.to_datetime(dfo.outl_start)) &
-                             (dfo.date < pd.to_datetime(dfo.outl_end)))
-        dfo['mask_step'] = (dfo['is_step'] &
-                            (dfo.date >= pd.to_datetime(dfo.outl_start)) &
-                            (dfo.date <= pd.to_datetime(dfo.outl_end)))
+        dfo["mask_spike"] = (
+            dfo["is_spike"]
+            & (dfo.date >= pd.to_datetime(dfo.outl_start))
+            & (dfo.date < pd.to_datetime(dfo.outl_end))
+        )
+        dfo["mask_step"] = (
+            dfo["is_step"]
+            & (dfo.date >= pd.to_datetime(dfo.outl_start))
+            & (dfo.date <= pd.to_datetime(dfo.outl_end))
+        )
     else:
         # For non-date x values, we fill na's and convert to int
-        dfo['outl_start'] = dfo.outl_start.fillna(0).astype(int)
-        dfo['outl_end'] = dfo.outl_end.fillna(0).astype(int)
+        dfo["outl_start"] = dfo.outl_start.fillna(0).astype(int)
+        dfo["outl_end"] = dfo.outl_end.fillna(0).astype(int)
         # Create the mask for spikes and steps
-        dfo['mask_spike'] = (dfo['is_spike'] &
-                             (dfo.x >= dfo.outl_start) &
-                             (dfo.x < dfo.outl_end))
-        dfo['mask_step'] = (dfo['is_step'] &
-                            (dfo.x >= dfo.outl_start) &
-                            (dfo.x <= dfo.outl_end))
+        dfo["mask_spike"] = dfo["is_spike"] & (dfo.x >= dfo.outl_start) & (dfo.x < dfo.outl_end)
+        dfo["mask_step"] = dfo["is_step"] & (dfo.x >= dfo.outl_start) & (dfo.x <= dfo.outl_end)
 
     return dfo.mask_step.values, dfo.mask_spike.values
 
@@ -1449,21 +1381,18 @@ def create_fixed_spike_ignored(x, duration):
 
 # Dummy variable models
 
+
 def _validate_f_dummy(f_dummy):
     # Ensures that behaviour of f_dummy matches specs
     # Must return array of floats, same length as a_x, with values either 0.
     # or 1.
     def validate_for_dummy(a_dummy):
         assert isinstance(a_dummy, np.ndarray)
-        assert np.setdiff1d(a_dummy, np.array([0., 1.])).size == 0
+        assert np.setdiff1d(a_dummy, np.array([0.0, 1.0])).size == 0
 
     # validate_for_dummy(f_dummy(np.arange(0, 10), None)) # Crashes with
     # f_dummy 's that require dates
-    validate_for_dummy(
-        f_dummy(
-            np.arange(
-                0, 10), pd.date_range(
-                '2018-01-01', '2018-01-10')))
+    validate_for_dummy(f_dummy(np.arange(0, 10), pd.date_range("2018-01-01", "2018-01-10")))
 
 
 def _get_f_dummy(dummy):
@@ -1501,7 +1430,7 @@ def _get_f_dummy_from_list(list_check):
     # Generate a f_dummy function that defines a dummy variable, can be used
     # for dummy models
     s_check = pd.Series(list_check)
-    assert s_check.size, 'Input list cannot be empty'
+    assert s_check.size, "Input list cannot be empty"
     if pd.api.types.is_numeric_dtype(s_check):
         list_check_numeric = s_check
 
@@ -1519,10 +1448,10 @@ def _get_f_dummy_from_list(list_check):
                 return np.isin(a_date, list_check_date).astype(float)
 
             return f_dummy_list_date
-        except BaseException:
+        except BaseException as exc:
             raise ValueError(
-                'list_dummy must be a list-like with numeric or'
-                'date-like values: %s', list_check)
+                f"list_dummy must be a list-like with numeric or date-like values: {list_check}",
+            ) from exc
 
 
 def _get_f_dummy_from_calendar(calendar):
@@ -1611,28 +1540,28 @@ def get_model_dummy(name, dummy, **kwargs):
 
 
     """
-    mask_name = 'mask_' + name
+    mask_name = "mask_" + name
     f_dummy = _get_f_dummy(dummy)
     _validate_f_dummy(f_dummy)
     f_model_dummy = _get_f_model_dummy(f_dummy, mask_name)
     dict_f_cache = {mask_name: f_dummy}
-    return ForecastModel(
-        name, 1, f_model_dummy, dict_f_cache=dict_f_cache, **kwargs)
+    return ForecastModel(name, 1, f_model_dummy, dict_f_cache=dict_f_cache, **kwargs)
 
 
 model_season_wday_2 = get_model_dummy(
-    'season_wday_2', lambda a_x, a_date, **kwargs:
-    (a_date.weekday < 5).astype(float))
+    "season_wday_2", lambda a_x, a_date, **kwargs: (a_date.weekday < 5).astype(float)
+)
 
 # Example dummy model - checks if it is Christmas
 model_dummy_christmas = get_model_dummy(
-    'dummy_christmas', lambda a_x, a_date, **kwargs:
-    ((a_date.month == 12) & (a_date.day == 25)).astype(float))
+    "dummy_christmas",
+    lambda a_x, a_date, **kwargs: ((a_date.month == 12) & (a_date.day == 25)).astype(float),
+)
 
 # Example dummy model - checks if it is first day of month
 model_dummy_month_start = get_model_dummy(
-    'dummy_month_start', lambda a_x, a_date, **kwargs:
-    (a_date.day == 1).astype(float))
+    "dummy_month_start", lambda a_x, a_date, **kwargs: (a_date.day == 1).astype(float)
+)
 
 
 class CalendarBankHolUK(AbstractHolidayCalendar):
@@ -1640,26 +1569,19 @@ class CalendarBankHolUK(AbstractHolidayCalendar):
         GoodFriday,
         EasterMonday,
         # Early May Bank Holiday - first Monday in May
-        Holiday('Early May Bank Holiday', month=5, day=1,
-                offset=DateOffset(weekday=MO(1))
-                ),
+        Holiday("Early May Bank Holiday", month=5, day=1, offset=DateOffset(weekday=MO(1))),
         # Spring Bank Holiday - Last Monday in May
-        Holiday('Spring Bank Holiday', month=5, day=31,
-                offset=DateOffset(weekday=MO(-1))
-                ),
+        Holiday("Spring Bank Holiday", month=5, day=31, offset=DateOffset(weekday=MO(-1))),
         # August Bank holiday - Last Monday in August
-        Holiday('August Bank Holiday', month=8, day=30,
-                offset=DateOffset(weekday=MO(-1))
-                )
+        Holiday("August Bank Holiday", month=8, day=30, offset=DateOffset(weekday=MO(-1))),
     ]
 
 
 class CalendarChristmasUK(AbstractHolidayCalendar):
     rules = [
-        Holiday('New Year\'s Day', month=1, day=1, observance=next_monday),
-        Holiday('Christmas', month=12, day=25, observance=next_monday),
-        Holiday('Boxing Day', month=12, day=26,
-                observance=next_monday_or_tuesday),
+        Holiday("New Year's Day", month=1, day=1, observance=next_monday),
+        Holiday("Christmas", month=12, day=25, observance=next_monday),
+        Holiday("Boxing Day", month=12, day=26, observance=next_monday_or_tuesday),
     ]
 
 
@@ -1667,22 +1589,21 @@ class CalendarChristmasUK(AbstractHolidayCalendar):
 class CalendarBankHolIta(AbstractHolidayCalendar):
     rules = [
         EasterMonday,
-        Holiday('Festa della Liberazione', month=4, day=25),
-        Holiday('Festa del lavoro', month=5, day=1),
-        Holiday('Festa della Repubblica', month=6, day=2),
-        Holiday('Ferragosto', month=8, day=15),
-        Holiday('Tutti i Santi', month=11, day=1),
-        Holiday('Immacolata Concezione', month=12, day=8),
+        Holiday("Festa della Liberazione", month=4, day=25),
+        Holiday("Festa del lavoro", month=5, day=1),
+        Holiday("Festa della Repubblica", month=6, day=2),
+        Holiday("Ferragosto", month=8, day=15),
+        Holiday("Tutti i Santi", month=11, day=1),
+        Holiday("Immacolata Concezione", month=12, day=8),
     ]
 
 
 class CalendarChristmasIta(AbstractHolidayCalendar):
     rules = [
-        Holiday('New Year\'s Day', month=1, day=1, observance=next_monday),
-        Holiday('Christmas', month=12, day=25, observance=next_monday),
-        Holiday('Santo Stefano', month=12, day=26,
-                observance=next_monday_or_tuesday),
-        Holiday('Epiphany', month=1, day=6, observance=next_monday),
+        Holiday("New Year's Day", month=1, day=1, observance=next_monday),
+        Holiday("Christmas", month=12, day=25, observance=next_monday),
+        Holiday("Santo Stefano", month=12, day=26, observance=next_monday_or_tuesday),
+        Holiday("Epiphany", month=1, day=6, observance=next_monday),
     ]
 
 
@@ -1720,18 +1641,16 @@ def get_model_from_calendars(l_calendar, name=None):
     # Filter out calendars without rules
     l_calendar = [calendar for calendar in l_calendar if calendar.rules]
 
-    assert len(l_calendar), 'Need 1+ valid calendars'
+    assert len(l_calendar), "Need 1+ valid calendars"
 
     if name is None:
         name = l_calendar[0].name
 
-    l_model_dummy = [get_model_dummy(calendar.name, calendar)
-                     for calendar in l_calendar]
+    l_model_dummy = [get_model_dummy(calendar.name, calendar) for calendar in l_calendar]
     f_model_prod = np.prod(l_model_dummy)
     f_model_sum = np.sum(l_model_dummy)
 
-    def _f_init_params_calendar(
-            a_x=None, a_y=None, a_date=None, is_mult=False):
+    def _f_init_params_calendar(a_x=None, a_y=None, a_date=None, is_mult=False):
         if is_mult:
             return np.ones(len(l_model_dummy))
         else:
@@ -1747,18 +1666,19 @@ def get_model_from_calendars(l_calendar, name=None):
         _f_model_calendar,
         _f_init_params_calendar,
         l_cache_vars=f_model_sum.l_cache_vars,
-        dict_f_cache=f_model_sum.dict_f_cache
+        dict_f_cache=f_model_sum.dict_f_cache,
     )
     return model_calendar
 
 
 model_calendar_uk = get_model_from_calendars(
-    [CalendarChristmasUK(), CalendarBankHolUK()], 'calendar_uk')
-model_calendar_us = get_model_from_calendars(USFederalHolidayCalendar(),
-                                             'calendar_us')
+    [CalendarChristmasUK(), CalendarBankHolUK()], "calendar_uk"
+)
+model_calendar_us = get_model_from_calendars(USFederalHolidayCalendar(), "calendar_us")
 # Calendar for Italy
 model_calendar_ita = get_model_from_calendars(
-    [CalendarChristmasIta(), CalendarBankHolIta()], 'calendar_ita')
+    [CalendarChristmasIta(), CalendarBankHolIta()], "calendar_ita"
+)
 
 
 def get_model_from_datelist(name=None, *args):
@@ -1786,14 +1706,12 @@ def get_model_from_datelist(name=None, *args):
     one applying to samples in date 3 and date4
 
     """
-    l_model_dummy = [get_model_dummy('model_dummy', pd.to_datetime(l_date))
-                     for l_date in args]
-    assert (len(l_model_dummy)), 'Need 1+ lists of dates'
+    l_model_dummy = [get_model_dummy("model_dummy", pd.to_datetime(l_date)) for l_date in args]
+    assert len(l_model_dummy), "Need 1+ lists of dates"
     f_model_prod = np.prod(l_model_dummy)
     f_model_sum = np.sum(l_model_dummy)
 
-    def _f_init_params_date_list(
-            a_x=None, a_y=None, a_date=None, is_mult=False):
+    def _f_init_params_date_list(a_x=None, a_y=None, a_date=None, is_mult=False):
         if is_mult:
             return np.ones(len(l_model_dummy))
         else:
@@ -1804,15 +1722,13 @@ def get_model_from_datelist(name=None, *args):
         return f_all_dummies(a_x, a_date, params, is_mult, **kwargs)
 
     model_date_list = ForecastModel(
-        name,
-        len(l_model_dummy),
-        _f_model_date_list,
-        _f_init_params_date_list
+        name, len(l_model_dummy), _f_model_date_list, _f_init_params_date_list
     )
     return model_date_list
 
 
 # Utility functions
+
 
 def fix_params_fmodel(forecast_model, l_params_fixed):
     """
@@ -1839,11 +1755,7 @@ def fix_params_fmodel(forecast_model, l_params_fixed):
     a_null = np.isnan(l_params_fixed)
     i_null = np.nonzero(a_null)
 
-    name = '{}_fixed_{}'.format(
-        forecast_model.name,
-        str(l_params_fixed).replace(
-            'nan',
-            ':'))
+    name = "{}_fixed_{}".format(forecast_model.name, str(l_params_fixed).replace("nan", ":"))
     n_params = len(i_null[0])
 
     def f_model_fixed(a_x, a_date, params, is_mult=False, **kwargs):
@@ -1864,12 +1776,7 @@ def fix_params_fmodel(forecast_model, l_params_fixed):
         bounds_max_short = np.array(bounds_max)[i_null]
         return bounds_min_short, bounds_max_short
 
-    model_result = ForecastModel(
-        name,
-        n_params,
-        f_model_fixed,
-        f_init_params_fixed,
-        f_bounds_fixed)
+    model_result = ForecastModel(name, n_params, f_model_fixed, f_init_params_fixed, f_bounds_fixed)
     return model_result
 
 
@@ -1898,12 +1805,10 @@ def simplify_model(f_model, a_x=None, a_y=None, a_date=None):
     if i_diff_zero[0].size == 0:
         return f_model
     else:  # We make parameters fixed if their min and max bounds are equal
-        params_fixed = np.full(f_model.n_params, np.NaN)
-        params_fixed[i_diff_zero, ] = bounds_max[i_diff_zero, ]
+        params_fixed = np.full(f_model.n_params, np.nan)
+        params_fixed[i_diff_zero,] = bounds_max[i_diff_zero,]
         f_model = fix_params_fmodel(f_model, params_fixed)
-        logger.info(
-            'Some min and max bounds are equal - generating fixed model: %s',
-            f_model.name)
+        logger.info("Some min and max bounds are equal - generating fixed model: %s", f_model.name)
         return f_model
 
 
@@ -1911,13 +1816,12 @@ def validate_initial_guess(initial_guess, bounds):
     # Check that initial parameter values fall within model bounds
     initial_guess = np.array(initial_guess)
     bounds_min, bounds_max = bounds
-    return np.all(
-        (initial_guess >= bounds_min) & (
-            initial_guess <= bounds_max))
+    return np.all((initial_guess >= bounds_min) & (initial_guess <= bounds_max))
 
 
-def get_l_model_auto_season(a_date, min_periods=1.5, season_add_mult='add',
-                            l_season_yearly=None, l_season_weekly=None):
+def get_l_model_auto_season(
+    a_date, min_periods=1.5, season_add_mult="add", l_season_yearly=None, l_season_weekly=None
+):
     """
     Generates a list of candidate seasonality models for an series of
     timestamps
@@ -1941,25 +1845,26 @@ def get_l_model_auto_season(a_date, min_periods=1.5, season_add_mult='add',
 
     use_season_yearly = (
         # Need more than a full year
-        (max_date_delta > pd.Timedelta(min_periods * 365, unit='d')) &
+        (max_date_delta > pd.Timedelta(min_periods * 365, unit="d"))
+        &
         # Need at least quarterly samples
-        (min_date_delta <= pd.Timedelta(92, unit='d'))
+        (min_date_delta <= pd.Timedelta(92, unit="d"))
     )
 
     use_season_weekly = (
         # Need more than a full week
-        (max_date_delta > pd.Timedelta(min_periods * 7, unit='d')) &
+        (max_date_delta > pd.Timedelta(min_periods * 7, unit="d"))
+        &
         # Need at least daily samples
-        (min_date_delta <= pd.Timedelta(1, unit='d'))
+        (min_date_delta <= pd.Timedelta(1, unit="d"))
     )
 
     l_season_yearly_default = [
         # model_season_month,
         model_season_fourier_yearly,
-        model_null]
-    l_season_weekly_default = [
-        model_season_wday,
-        model_null]
+        model_null,
+    ]
+    l_season_weekly_default = [model_season_wday, model_null]
 
     if use_season_weekly:
         if l_season_weekly is None:
@@ -1981,15 +1886,16 @@ def get_l_model_auto_season(a_date, min_periods=1.5, season_add_mult='add',
 
     l_result = [model_null]
     for s_w, s_y in itertools.product(l_season_weekly, l_season_yearly):
-
         model_season_add = s_w + s_y
         model_season_mult = s_w * s_y
 
-        if season_add_mult in ['add'] and model_season_add != model_null:
+        if season_add_mult in ["add"] and model_season_add != model_null:
             l_result += [model_season_add]
-        if season_add_mult in ['mult'] and \
-                model_season_mult != model_null and \
-                model_season_mult not in l_result:
+        if (
+            season_add_mult in ["mult"]
+            and model_season_mult != model_null
+            and model_season_mult not in l_result
+        ):
             l_result += [model_season_mult]
     # Sort values to make results more predictable, testable
     l_result.sort()

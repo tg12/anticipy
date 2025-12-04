@@ -4,10 +4,10 @@
     "version": 1,
 
     // The name of the project being benchmarked
-    "project": "anticipy",
+    "project": "anticipy-sawyer",
 
     // The project's homepage
-    "project_url": "https://github.com/sky-uk/anticipy/",
+    "project_url": "https://github.com/jamessawyer/anticipy/",
 
     // The URL or local path of the source code repository for the
     // project being benchmarked

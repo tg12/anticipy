@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # License:          This module is released under the terms of the LICENSE file
 #                   contained within this applications INSTALL directory
@@ -7,41 +6,23 @@
 Functions to run forecast
 """
 
-# -- Coding Conventions
-#    http://www.python.org/dev/peps/pep-0008/   -   Use the Python style guide
-# http://sphinx.pocoo.org/rest.html          -   Use Restructured Text for
-# docstrings
+from __future__ import annotations
 
-
-# -- Public Imports
-from __future__ import division  # Required to avoid python 2 divison bugs
 import itertools
 import logging
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import scipy
 from numpy.linalg import LinAlgError
-from scipy import optimize
-from datetime import datetime
-import math
 
-# -- Private Imports
 from anticipy import forecast_models, model_utils
-# -- Globals
 from anticipy.model_utils import detect_freq
 
 logger = logging.getLogger(__name__)
 
 
-# -- Exception classes
-
-# -- Functions
-def logger_info(msg, data):
-    # Convenience function for easier log typing
-    logger.info(msg + '\n%s', data)
-
-
-# Utility functions
 def to_str_function_list(l_function):
     # Get string representation for a list of functions or ForecastModel
     # instances
@@ -50,21 +31,7 @@ def to_str_function_list(l_function):
     return [f.name if f is not None else None for f in l_function]
 
 
-def is_null_model(f_model):
-    # Check if model is null model
-    return f_model.name == 'null'
-
-
-def get_residuals(
-        params,
-        model,
-        a_x,
-        a_y,
-        a_date,
-        a_weights=None,
-        df_actuals=None,
-        **kwargs
-):
+def get_residuals(params, model, a_x, a_y, a_date, a_weights=None, df_actuals=None, **kwargs):
     """
     Given a time series, a model function and a set of parameters,
     get the residuals
@@ -93,9 +60,8 @@ def get_residuals(
     # We do not check this with asserts due to performance - this function is
     # in the optimization loop
 
-    y_predicted = model(a_x, a_date, params, df_actuals=df_actuals,
-                        **kwargs)
-    residuals = (a_y - y_predicted)
+    y_predicted = model(a_x, a_date, params, df_actuals=df_actuals, **kwargs)
+    residuals = a_y - y_predicted
     if a_weights is not None:  # Do this only if different residual weights
         residuals = residuals * a_weights
     result = np.abs(residuals)
@@ -103,14 +69,14 @@ def get_residuals(
 
 
 def optimize_least_squares(
-        model,
-        a_x,
-        a_y,
-        a_date,
-        a_weights=None,
-        df_actuals=None,
-        # Testing parameters
-        use_cache=True
+    model,
+    a_x,
+    a_y,
+    a_date,
+    a_weights=None,
+    df_actuals=None,
+    # Testing parameters
+    use_cache=True,
 ):
     """
     Given a time series and a model function, find the set of
@@ -152,9 +118,9 @@ def optimize_least_squares(
 
     bounds = model.f_bounds(a_x, a_y)
 
-    assert forecast_models.validate_initial_guess(initial_guess, bounds), \
-        'Initial guess outside of bounds: {} - {}, {}'.format(
-            model, initial_guess, bounds)
+    assert forecast_models.validate_initial_guess(initial_guess, bounds), (
+        f"Initial guess outside of bounds: {model} - {initial_guess}, {bounds}"
+    )
 
     # In multi-ts scenarios, we apply this filter to ignore residuals for null
     # y_values
@@ -163,85 +129,77 @@ def optimize_least_squares(
         filter_null_residuals = None
 
     dict_cache_vars = model.init_cache(a_x, a_date) if use_cache else dict()
-    dict_kwargs = dict(
-        a_weights=a_weights,
-        df_actuals=df_actuals,
-        **dict_cache_vars
-    )
+    dict_kwargs = dict(a_weights=a_weights, df_actuals=df_actuals, **dict_cache_vars)
 
     # Set up arguments for get_residuals
     f_model_args = (model, a_x, a_y, a_date)
     try:
         result = scipy.optimize.least_squares(
-            get_residuals, initial_guess,
+            get_residuals,
+            initial_guess,
             args=f_model_args,
             kwargs=dict_kwargs,
             # method='lm',
-            method='trf',
-            x_scale='jac',
+            method="trf",
+            x_scale="jac",
             # verbose=1,
-            bounds=bounds
+            bounds=bounds,
         )
         dict_result_df = {
-            'optimality': result['optimality'],
-            'success': result['success'],
-            'cost': result['cost'],
-            'iterations': result['nfev'],
-            'jac_evals': result['njev'],
-            'status': result['status'],
-            'message': result['message'],
-            'params': [result['x']]
+            "optimality": result["optimality"],
+            "success": result["success"],
+            "cost": result["cost"],
+            "iterations": result["nfev"],
+            "jac_evals": result["njev"],
+            "status": result["status"],
+            "message": result["message"],
+            "params": [result["x"]],
         }
-    except LinAlgError as e:
-        logger.info('LinAlgError: Model did not converge - %s', model)
+    except LinAlgError:
+        logger.info("LinAlgError: Model did not converge - %s", model)
         dict_result_df = {
-            'optimality': 0.,
-            'success': False,
-            'cost': np.NaN,
-            'iterations': 0.,
-            'jac_evals': 0.,
-            'status': 0,
-            'message': 'LinAlgError',
-            'params': None
+            "optimality": 0.0,
+            "success": False,
+            "cost": np.nan,
+            "iterations": 0.0,
+            "jac_evals": 0.0,
+            "status": 0,
+            "message": "LinAlgError",
+            "params": None,
         }
 
     df_result = pd.DataFrame(data=dict_result_df, index=pd.Index([0]))
-    df_result = df_result[['success',
-                           'params',
-                           'cost',
-                           'optimality',
-                           'iterations',
-                           'status',
-                           'jac_evals',
-                           'message']]
+    df_result = df_result[
+        ["success", "params", "cost", "optimality", "iterations", "status", "jac_evals", "message"]
+    ]
     return df_result
 
 
-def _get_df_fit_model(source, model, weights, actuals_x_range, freq,
-                      is_fit, cost, aic_c, params, status,
-                      fit_time=0):
+def _get_df_fit_model(
+    source, model, weights, actuals_x_range, freq, is_fit, cost, aic_c, params, status, fit_time=0
+):
     # Generate a metadata dataframe for the output of fit_model()
     if params is None:
         params = np.array([])
-    df_result = (
-        pd.DataFrame(
-            columns=[
-                'source',
-                'model',
-                'weights',
-                'actuals_x_range',
-                'freq',
-                'is_fit',
-                'cost',
-                'aic_c',
-                'fit_time',
-                'params_str',
-                'status',
-                'source_long',
-                'params',
-                'model_obj'
-            ],
-            data=[[
+    df_result = pd.DataFrame(
+        columns=[
+            "source",
+            "model",
+            "weights",
+            "actuals_x_range",
+            "freq",
+            "is_fit",
+            "cost",
+            "aic_c",
+            "fit_time",
+            "params_str",
+            "status",
+            "source_long",
+            "params",
+            "model_obj",
+        ],
+        data=[
+            [
                 source,
                 model.name,
                 weights,
@@ -253,55 +211,60 @@ def _get_df_fit_model(source, model, weights, actuals_x_range, freq,
                 fit_time,
                 np.array_str(params, precision=1),
                 status,
-                '{}:{}:{}:{}'.format(
-                    source, weights, freq, actuals_x_range),
+                f"{source}:{weights}:{freq}:{actuals_x_range}",
                 params,
-                model
-            ]]))
+                model,
+            ]
+        ],
+    )
     return df_result
 
 
-def _get_empty_df_result_optimize(
-        source,
-        model,
-        status,
-        weights,
-        freq,
-        actuals_x_range):
+def _get_empty_df_result_optimize(source, model, status, weights, freq, actuals_x_range):
     # Generate an optimize_info dataframe for fit_model(), for an empty result
-    source_long = '{}:{}:{}:{}'.format(source, weights, freq, actuals_x_range)
-    return pd.DataFrame(columns=['source',
-                                 'model',
-                                 'success',
-                                 'params_str',
-                                 'cost',
-                                 'optimality',
-                                 'iterations',
-                                 'status',
-                                 'jac_evals',
-                                 'message',
-                                 'source_long',
-                                 'params'],
-                        data=[[source,
-                               model,
-                               False,
-                               '[]',
-                               np.NaN,
-                               np.NaN,
-                               np.NaN,
-                               status,
-                               np.NaN,
-                               status,
-                               source_long,
-                               []]])
+    source_long = f"{source}:{weights}:{freq}:{actuals_x_range}"
+    return pd.DataFrame(
+        columns=[
+            "source",
+            "model",
+            "success",
+            "params_str",
+            "cost",
+            "optimality",
+            "iterations",
+            "status",
+            "jac_evals",
+            "message",
+            "source_long",
+            "params",
+        ],
+        data=[
+            [
+                source,
+                model,
+                False,
+                "[]",
+                np.nan,
+                np.nan,
+                np.nan,
+                status,
+                np.nan,
+                status,
+                source_long,
+                [],
+            ]
+        ],
+    )
 
 
-def normalize_df(df_y,
-                 col_name_y='y',
-                 col_name_weight='weight',
-                 col_name_x='x',
-                 col_name_date='date',
-                 col_name_source='source'):
+def normalize_df(
+    df_y,
+    col_name_y="y",
+    col_name_weight="weight",
+    col_name_x="x",
+    col_name_date="date",
+    col_name_source="source",
+):
     """
     Converts an input dataframe for run_forecast() into a normalized format
     suitable for fit_model()
@@ -321,7 +284,7 @@ def normalize_df(df_y,
     :type col_name_source: basestring
     :return: formatted input dataframe, for use by run_forecast()
     :rtype: pandas.DataFrame
-     """
+    """
 
     assert df_y is not None
     if df_y.empty:
@@ -330,47 +293,43 @@ def normalize_df(df_y,
     if isinstance(df_y, pd.Series):
         df_y = df_y.to_frame()
     assert isinstance(df_y, pd.DataFrame)
-    assert col_name_y in df_y.columns, \
-        'Dataframe needs to have a column named "{}"'.format(
-            col_name_y)
+    assert col_name_y in df_y.columns, f'Dataframe needs to have a column named "{col_name_y}"'
     df_y = df_y.copy()
 
     # Rename columns to normalized values
     rename_col_dict = {
-        col_name_y: 'y',
-        col_name_weight: 'weight',
-        col_name_x: 'x',
-        col_name_date: 'date',
-        col_name_source: 'source'
+        col_name_y: "y",
+        col_name_weight: "weight",
+        col_name_x: "x",
+        col_name_date: "date",
+        col_name_source: "source",
     }
     df_y = df_y.copy().rename(rename_col_dict, axis=1)
 
     # Placeholder - need to replace all references to col_name_z with z
-    col_name_y = 'y'
-    col_name_weight = 'weight'
-    col_name_x = 'x'
-    col_name_date = 'date'
-    col_name_source = 'source'
+    col_name_y = "y"
+    col_name_weight = "weight"
+    col_name_x = "x"
+    col_name_date = "date"
+    col_name_source = "source"
 
     # Ensure y column is float
     df_y[col_name_y] = df_y[col_name_y].astype(float)
 
     multiple_sources = col_name_source in df_y.columns
-    l_sources = df_y[col_name_source].drop_duplicates()\
-        if multiple_sources else ['test_source']
+    l_sources = df_y[col_name_source].drop_duplicates() if multiple_sources else ["test_source"]
 
     l_df_results = []
     for source in l_sources:
-        df_y_tmp = df_y.loc[df_y[col_name_source] ==
-                            source].copy() if multiple_sources else df_y
+        df_y_tmp = df_y.loc[df_y[col_name_source] == source].copy() if multiple_sources else df_y
         # Setup date, x columns
         if col_name_date not in df_y.columns and isinstance(
-                df_y.index, pd.DatetimeIndex):  # use index as i_date
+            df_y.index, pd.DatetimeIndex
+        ):  # use index as i_date
             df_y_tmp[col_name_date] = df_y_tmp.index
         elif col_name_date in df_y.columns:
             # Ensure that date column is timestamp dtype
-            df_y_tmp[col_name_date] = df_y_tmp[col_name_date].pipe(
-                pd.to_datetime)
+            df_y_tmp[col_name_date] = df_y_tmp[col_name_date].pipe(pd.to_datetime)
 
         # if isinstance(df_y_tmp.index, pd.DatetimeIndex):
         # We don't need a date index after this point
@@ -379,7 +338,8 @@ def normalize_df(df_y,
         if col_name_x not in df_y_tmp.columns:
             if col_name_date in df_y_tmp.columns:
                 df_y_tmp[col_name_x] = model_utils.get_normalized_x_from_date(
-                    df_y_tmp[col_name_date])
+                    df_y_tmp[col_name_date]
+                )
             else:  # With no date, extract column x from a numeric index
                 df_y_tmp[col_name_x] = df_y_tmp.index
 
@@ -387,26 +347,33 @@ def normalize_df(df_y,
 
     # Rename columns to normalized values
     rename_col_dict = {
-        col_name_y: 'y',
-        col_name_weight: 'weight',
-        col_name_x: 'x',
-        col_name_date: 'date',
-        col_name_source: 'source'
+        col_name_y: "y",
+        col_name_weight: "weight",
+        col_name_x: "x",
+        col_name_date: "date",
+        col_name_source: "source",
     }
 
     df_result = pd.concat(l_df_results, sort=False, ignore_index=True)
 
     # Sort columns, filter unused columns
-    df_result = df_result[[c for c in [
-        'date', 'source', 'x', 'y', 'weight'] if c in df_result.columns]]
-    sort_columns = ['source', 'x'] if 'source' in df_result.columns else ['x']
+    df_result = df_result[
+        [c for c in ["date", "source", "x", "y", "weight"] if c in df_result.columns]
+    ]
+    sort_columns = ["source", "x"] if "source" in df_result.columns else ["x"]
     df_result = df_result.sort_values(sort_columns).reset_index(drop=True)
     return df_result
 
 
-def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
-              # Testing parameters
-              use_cache=True):
+def fit_model(
+    model,
+    df_y,
+    freq="W",
+    source="test",
+    df_actuals=None,
+    # Testing parameters
+    use_cache=True,
+):
     """
     Given a time series and a model, optimize model parameters and return
 
@@ -437,13 +404,12 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
     loop. It performs some cleaning up of input
     and output parameters.
     """
-    col_name_y = 'y'
-    col_name_weight = 'weight'
-    col_name_x = 'x'
-    col_name_date = 'date'
+    col_name_y = "y"
+    col_name_weight = "weight"
+    col_name_x = "x"
+    col_name_date = "date"
 
-    assert df_y is not None and isinstance(
-        df_y, pd.DataFrame) and col_name_y in df_y.columns
+    assert df_y is not None and isinstance(df_y, pd.DataFrame) and col_name_y in df_y.columns
 
     # Setup
     f_model_name = model.name
@@ -455,10 +421,9 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
 
     # Metadata
     if col_name_weight not in df_y.columns:
-        weights = '1'
+        weights = "1"
     else:
-        weights = '{}-{}'.format(df_y[col_name_weight].min(),
-                                 df_y[col_name_weight].max())
+        weights = f"{df_y[col_name_weight].min()}-{df_y[col_name_weight].max()}"
 
     # Filter out any sample where a_weights is 0
     if col_name_weight in df_y.columns:
@@ -467,88 +432,66 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
 
     # Residual normalization
     if df_y[col_name_x].duplicated().any():
-        df_k = df_y.groupby(col_name_x).size().rename(
-            'k_weight_normalize').reset_index()
+        df_k = df_y.groupby(col_name_x).size().rename("k_weight_normalize").reset_index()
         df_y = df_y.merge(df_k)
         if col_name_weight not in df_y:
             df_y[col_name_weight] = 1.0
         # Adjust residual weight based on number of values per sample
         # E.g. a sample with 2 values in the input series will multiply
         # residuals by 0.5
-        df_y[col_name_weight] = df_y[col_name_weight] /\
-            df_y['k_weight_normalize']
+        df_y[col_name_weight] = df_y[col_name_weight] / df_y["k_weight_normalize"]
 
     # Get input arrays
     a_y = df_y[col_name_y].values
     a_x = model_utils.apply_a_x_scaling(df_y[col_name_x].values, model)
-    a_weights = df_y[col_name_weight].values \
-        if col_name_weight in df_y.columns else None
+    a_weights = df_y[col_name_weight].values if col_name_weight in df_y.columns else None
     # Need to convert series to DatetimeIndex
-    i_date = pd.DatetimeIndex(
-        df_y[col_name_date]) if col_name_date in df_y.columns else None
+    i_date = pd.DatetimeIndex(df_y[col_name_date]) if col_name_date in df_y.columns else None
 
     # Metadata
-    cost = np.NaN
+    cost = np.nan
     is_fit = False
     params = []
     # Get first and last actuals date, for metadata. If no a_date, use a_x
     # instead.
-    date_start_actuals = i_date.min().date()\
-        if i_date is not None else a_x.min()
-    date_end_actuals = i_date.max().date()\
-        if i_date is not None else a_x.max()
-    actuals_x_range = '{}::{}'.format(date_start_actuals, date_end_actuals)
+    date_start_actuals = i_date.min().date() if i_date is not None else a_x.min()
+    date_end_actuals = i_date.max().date() if i_date is not None else a_x.max()
+    actuals_x_range = f"{date_start_actuals}::{date_end_actuals}"
 
     if df_y.empty:
-        logger.info('Cannot fit - empty df_y: %s', source)
-        status = 'EMPTY_TS'
+        logger.info("Cannot fit - empty df_y: %s", source)
+        status = "EMPTY_TS"
         df_result = _get_df_fit_model(
-            source,
-            model,
-            weights,
-            actuals_x_range,
-            freq,
-            is_fit,
-            cost,
-            np.NaN,
-            None,
-            status)
+            source, model, weights, actuals_x_range, freq, is_fit, cost, np.nan, None, status
+        )
         df_result_optimize = _get_empty_df_result_optimize(
-            source, model, status, weights, freq, actuals_x_range)
+            source, model, status, weights, freq, actuals_x_range
+        )
 
     elif a_x.size < n_params + 2:
-        logger.info('Not enough samples in source %s for %s: %s (needs %s)',
-                    source, f_model_name, a_x.size, n_params + 2)
-        status = 'TS_TOO_SHORT'
-        df_result = _get_df_fit_model(
+        logger.info(
+            "Not enough samples in source %s for %s: %s (needs %s)",
             source,
-            model,
-            weights,
-            actuals_x_range,
-            freq,
-            is_fit,
-            cost,
-            np.NaN,
-            None,
-            status)
+            f_model_name,
+            a_x.size,
+            n_params + 2,
+        )
+        status = "TS_TOO_SHORT"
+        df_result = _get_df_fit_model(
+            source, model, weights, actuals_x_range, freq, is_fit, cost, np.nan, None, status
+        )
         df_result_optimize = _get_empty_df_result_optimize(
-            source, model, status, weights, freq, actuals_x_range)
+            source, model, status, weights, freq, actuals_x_range
+        )
     elif not model.validate_input(a_x, a_y, i_date):
-        logger.info('Invalid input for %s for %s:', source, f_model_name)
-        status = 'INPUT_ERR'
+        logger.info("Invalid input for %s for %s:", source, f_model_name)
+        status = "INPUT_ERR"
         df_result = _get_df_fit_model(
-            source,
-            model,
-            weights,
-            actuals_x_range,
-            freq,
-            is_fit,
-            cost,
-            np.NaN,
-            None,
-            status)
+            source, model, weights, actuals_x_range, freq, is_fit, cost, np.nan, None, status
+        )
         df_result_optimize = _get_empty_df_result_optimize(
-            source, model, status, weights, freq, actuals_x_range)
+            source, model, status, weights, freq, actuals_x_range
+        )
     else:  # Get results
         model = forecast_models.simplify_model(model, a_x, a_y, i_date)
 
@@ -556,18 +499,13 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
             # 0-parameter model, no fit required
             time_start = datetime.now()
             a_residuals = get_residuals(
-                None,
-                model,
-                a_x,
-                a_y,
-                i_date,
-                a_weights,
-                df_actuals=df_actuals)
+                None, model, a_x, a_y, i_date, a_weights, df_actuals=df_actuals
+            )
             fit_time = (datetime.now() - time_start).total_seconds()
-            cost = 0.5 * np.nansum(a_residuals ** 2)
+            cost = 0.5 * np.nansum(a_residuals**2)
             is_fit = True
             params = np.array([])
-            status = 'FIT'
+            status = "FIT"
 
             # Process results
             aic_c = model_utils.get_aic_c(cost, len(df_y), n_params)
@@ -583,57 +521,68 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
                 aic_c,
                 params,
                 status,
-                fit_time=fit_time
+                fit_time=fit_time,
             )
 
             dict_result_df = {
-                'optimality': 0.,
-                'success': True,
-                'cost': cost,
-                'iterations': 0.,
-                'jac_evals': 0.,
-                'status': 0,
-                'message': 'Naive model fitted',
-                'params': '-'
+                "optimality": 0.0,
+                "success": True,
+                "cost": cost,
+                "iterations": 0.0,
+                "jac_evals": 0.0,
+                "status": 0,
+                "message": "Naive model fitted",
+                "params": "-",
             }
-            df_result_optimize = pd.DataFrame(
-                data=dict_result_df, index=pd.Index([0]))
-            df_result_optimize = df_result_optimize[[
-                'success', 'params', 'cost', 'optimality', 'iterations',
-                'status', 'jac_evals', 'message']]
-            df_result_optimize['source'] = source
-            df_result_optimize['source_long'] = df_result.source_long.iloc[0]
-            df_result_optimize['model'] = model
-            df_result_optimize['params_str'] = df_result.params_str.iloc[0]
-            df_result_optimize = df_result_optimize[['source',
-                                                     'model',
-                                                     'success',
-                                                     'params_str',
-                                                     'cost',
-                                                     'optimality',
-                                                     'iterations',
-                                                     'status',
-                                                     'jac_evals',
-                                                     'message',
-                                                     'source_long',
-                                                     'params']]
+            df_result_optimize = pd.DataFrame(data=dict_result_df, index=pd.Index([0]))
+            df_result_optimize = df_result_optimize[
+                [
+                    "success",
+                    "params",
+                    "cost",
+                    "optimality",
+                    "iterations",
+                    "status",
+                    "jac_evals",
+                    "message",
+                ]
+            ]
+            df_result_optimize["source"] = source
+            df_result_optimize["source_long"] = df_result.source_long.iloc[0]
+            df_result_optimize["model"] = model
+            df_result_optimize["params_str"] = df_result.params_str.iloc[0]
+            df_result_optimize = df_result_optimize[
+                [
+                    "source",
+                    "model",
+                    "success",
+                    "params_str",
+                    "cost",
+                    "optimality",
+                    "iterations",
+                    "status",
+                    "jac_evals",
+                    "message",
+                    "source_long",
+                    "params",
+                ]
+            ]
         else:
             time_start = datetime.now()
             df_result_optimize = optimize_least_squares(
-                model, a_x, a_y, i_date, a_weights, df_actuals=df_actuals,
-                use_cache=use_cache
+                model, a_x, a_y, i_date, a_weights, df_actuals=df_actuals, use_cache=use_cache
             )
             fit_time = (datetime.now() - time_start).total_seconds()
             cost = df_result_optimize.cost.iloc[0]
             is_fit = df_result_optimize.success.iloc[0]
             params = df_result_optimize.params.iloc[0]
-            status = 'FIT' if is_fit else 'NO-FIT'
+            status = "FIT" if is_fit else "NO-FIT"
 
             # Process results
-            if status in ['FIT', 'NO-FIT']:
+            if status in ["FIT", "NO-FIT"]:
                 aic_c = model_utils.get_aic_c(cost, len(df_y), n_params)
             else:
-                aic_c = np.NaN
+                aic_c = np.nan
 
             df_result = _get_df_fit_model(
                 source,
@@ -646,39 +595,44 @@ def fit_model(model, df_y, freq='W', source='test', df_actuals=None,
                 aic_c,
                 params,
                 status,
-                fit_time
+                fit_time,
             )
 
-            df_result_optimize['source'] = source
-            df_result_optimize['source_long'] = df_result.source_long.iloc[0]
-            df_result_optimize['model'] = model
-            df_result_optimize['params_str'] = df_result.params_str.iloc[0]
-            df_result_optimize = df_result_optimize[['source',
-                                                     'model',
-                                                     'success',
-                                                     'params_str',
-                                                     'cost',
-                                                     'optimality',
-                                                     'iterations',
-                                                     'status',
-                                                     'jac_evals',
-                                                     'message',
-                                                     'source_long',
-                                                     'params']]
+            df_result_optimize["source"] = source
+            df_result_optimize["source_long"] = df_result.source_long.iloc[0]
+            df_result_optimize["model"] = model
+            df_result_optimize["params_str"] = df_result.params_str.iloc[0]
+            df_result_optimize = df_result_optimize[
+                [
+                    "source",
+                    "model",
+                    "success",
+                    "params_str",
+                    "cost",
+                    "optimality",
+                    "iterations",
+                    "status",
+                    "jac_evals",
+                    "message",
+                    "source_long",
+                    "params",
+                ]
+            ]
 
-    dict_result = {'metadata': df_result, 'optimize_info': df_result_optimize}
+    dict_result = {"metadata": df_result, "optimize_info": df_result_optimize}
     return dict_result
 
 
 def extrapolate_model(
-        model,
-        params,
-        date_start_actuals,
-        date_end_actuals,
-        freq='W',
-        extrapolate_years=2.0,
-        x_start_actuals=0.,
-        df_actuals=None):
+    model,
+    params,
+    date_start_actuals,
+    date_end_actuals,
+    freq="W",
+    extrapolate_years=2.0,
+    x_start_actuals=0.0,
+    df_actuals=None,
+):
     """
     Given a model and a set of parameters, generate model output for a date
     range plus a number of additional years.
@@ -694,8 +648,7 @@ def extrapolate_model(
     :param freq: Time unit between samples. Supported units are 'W' for
         weekly samples, or 'D' for daily samples.
         (untested) Any date unit or time unit accepted by numpy should also
-        work, see
-        https://docs.scipy.org/doc/numpy-1.13.0/reference/arrays.datetime.html#arrays-dtypes-dateunits # noqa
+        work; see numpy datetime dtype documentation for supported units.
     :type freq: basestring
     :param extrapolate_years: Number of years (or fraction of year) covered by
         the generated time series, after the
@@ -715,14 +668,15 @@ def extrapolate_model(
         model=model,
         freq=freq,
         extrapolate_years=extrapolate_years,
-        x_start_actuals=x_start_actuals)
+        x_start_actuals=x_start_actuals,
+    )
     a_y_forecast = model(s_x.values, s_x.index, params, df_actuals=df_actuals)
-    s_y_forecast = pd.Series(data=a_y_forecast, index=s_x.index, name='y')
+    s_y_forecast = pd.Series(data=a_y_forecast, index=s_x.index, name="y")
     df_y_forecast = pd.DataFrame(s_y_forecast)
     return df_y_forecast
 
 
-def get_list_model(l_model_trend, l_model_season, season_add_mult='both'):
+def get_list_model(l_model_trend, l_model_season, season_add_mult="both"):
     """
     Generate a list of composite models from lists of trend and seasonality
     models
@@ -745,14 +699,16 @@ def get_list_model(l_model_trend, l_model_season, season_add_mult='both'):
         l_model_tmp = l_model_season
     else:
         l_model_tmp = []
-        if season_add_mult != 'mult':  # 'add' or 'both'
-            l_model_tmp += [model_trend + model_season for
-                            model_trend, model_season in
-                            itertools.product(l_model_trend, l_model_season)]
-        if season_add_mult != 'add':  # 'mult' or 'both'
-            l_model_tmp += [model_trend * model_season for
-                            model_trend, model_season in
-                            itertools.product(l_model_trend, l_model_season)]
+        if season_add_mult != "mult":  # 'add' or 'both'
+            l_model_tmp += [
+                model_trend + model_season
+                for model_trend, model_season in itertools.product(l_model_trend, l_model_season)
+            ]
+        if season_add_mult != "add":  # 'mult' or 'both'
+            l_model_tmp += [
+                model_trend * model_season
+                for model_trend, model_season in itertools.product(l_model_trend, l_model_season)
+            ]
 
     l_model_tmp = pd.Series(l_model_tmp).drop_duplicates().tolist()
     return l_model_tmp
@@ -774,17 +730,16 @@ def get_df_actuals_clean(df_actuals, source, source_long):
     """
     # Add actuals as entries in result dicts
     df_actuals = df_actuals.copy()  # .rename_axis('date')
-    if 'date' not in df_actuals.columns:
-        df_actuals = df_actuals.rename({'x': 'date'}, axis=1)
-    df_actuals = df_actuals[[c for c in [
-        'date', 'weight', 'y'] if c in df_actuals.columns]]
+    if "date" not in df_actuals.columns:
+        df_actuals = df_actuals.rename({"x": "date"}, axis=1)
+    df_actuals = df_actuals[[c for c in ["date", "weight", "y"] if c in df_actuals.columns]]
 
-    df_actuals['model'] = 'actuals'
-    df_actuals['source'] = source
-    df_actuals['source_long'] = source_long
-    df_actuals['is_actuals'] = True
-    if 'weight' not in df_actuals.columns:
-        df_actuals['weight'] = 1.0
+    df_actuals["model"] = "actuals"
+    df_actuals["source"] = source
+    df_actuals["source_long"] = source_long
+    df_actuals["is_actuals"] = True
+    if "weight" not in df_actuals.columns:
+        df_actuals["weight"] = 1.0
     return df_actuals
 
 
@@ -792,36 +747,43 @@ def _get_df_fcast_clean(df_fcast, source, source_long, model):
     # This removes any forecast samples with null values, e.g. from naive
     # models
     df_fcast = df_fcast.loc[~df_fcast.y.pipe(pd.isnull)]
-    df_fcast = df_fcast.copy().rename_axis('date').reset_index()
-    df_fcast['source'] = source
-    df_fcast['source_long'] = source_long
-    df_fcast['model'] = model
-    df_fcast['is_actuals'] = False
-    df_fcast['weight'] = 1.0
+    df_fcast = df_fcast.copy().rename_axis("date").reset_index()
+    df_fcast["source"] = source
+    df_fcast["source_long"] = source_long
+    df_fcast["model"] = model
+    df_fcast["is_actuals"] = False
+    df_fcast["weight"] = 1.0
     return df_fcast
 
 
-def run_forecast(df_y, l_model_trend=None, l_model_season=None,
-                 date_start_actuals=None, source_id='src',
-                 col_name_y='y', col_name_weight='weight',
-                 col_name_x='x', col_name_date='date',
-                 col_name_source='source',
-                 extrapolate_years=0, season_add_mult='add',
-                 include_all_fits=False,
-                 simplify_output=True,
-                 find_outliers=False,
-                 l_season_yearly=None,
-                 l_season_weekly=None,
-                 verbose=None,
-                 l_model_naive=None,
-                 l_model_calendar=None,
-                 n_cum=None,
-                 pi_q1=5,
-                 pi_q2=20,
-                 pi_widening_freq='Y',
-                 # Testing parameters
-                 use_cache=True
-                 ):
+def run_forecast(
+    df_y,
+    l_model_trend=None,
+    l_model_season=None,
+    date_start_actuals=None,
+    source_id="src",
+    col_name_y="y",
+    col_name_weight="weight",
+    col_name_x="x",
+    col_name_date="date",
+    col_name_source="source",
+    extrapolate_years=0,
+    season_add_mult="add",
+    include_all_fits=False,
+    simplify_output=True,
+    find_outliers=False,
+    l_season_yearly=None,
+    l_season_weekly=None,
+    verbose=None,
+    l_model_naive=None,
+    l_model_calendar=None,
+    n_cum=None,
+    pi_q1=5,
+    pi_q2=20,
+    pi_widening_freq="Y",
+    # Testing parameters
+    use_cache=True,
+):
     """
     Generate forecast for one or more input time series
 
@@ -915,40 +877,37 @@ def run_forecast(df_y, l_model_trend=None, l_model_season=None,
     l_dict_result = []
 
     df_y = normalize_df(
-        df_y,
-        col_name_y,
-        col_name_weight,
-        col_name_x,
-        col_name_date,
-        col_name_source)
+        df_y, col_name_y, col_name_weight, col_name_x, col_name_date, col_name_source
+    )
     if df_y is None:  # Empty input
         return None
 
-    if 'source' not in df_y.columns:
-        return run_forecast_single(df_y,
-                                   l_model_trend,
-                                   l_model_season,
-                                   date_start_actuals,
-                                   source_id,
-                                   extrapolate_years,
-                                   season_add_mult,
-                                   include_all_fits,
-                                   simplify_output,
-                                   find_outliers,
-                                   l_season_yearly,
-                                   l_season_weekly,
-                                   l_model_naive=l_model_naive,
-                                   l_model_calendar=l_model_calendar,
-                                   n_cum=n_cum,
-                                   pi_q1=pi_q1,
-                                   pi_q2=pi_q2,
-                                   pi_widening_freq=pi_widening_freq,
-                                   use_cache=use_cache
-                                   )
+    if "source" not in df_y.columns:
+        return run_forecast_single(
+            df_y,
+            l_model_trend,
+            l_model_season,
+            date_start_actuals,
+            source_id,
+            extrapolate_years,
+            season_add_mult,
+            include_all_fits,
+            simplify_output,
+            find_outliers,
+            l_season_yearly,
+            l_season_weekly,
+            l_model_naive=l_model_naive,
+            l_model_calendar=l_model_calendar,
+            n_cum=n_cum,
+            pi_q1=pi_q1,
+            pi_q2=pi_q2,
+            pi_widening_freq=pi_widening_freq,
+            use_cache=use_cache,
+        )
     else:
         for src_tmp in df_y.source.drop_duplicates():
             if verbose:
-                logger.info('Running forecast for source: %s', src_tmp)
+                logger.info("Running forecast for source: %s", src_tmp)
             df_y_tmp = df_y.loc[df_y.source == src_tmp].reset_index(drop=True)
             dict_result_tmp = run_forecast_single(
                 df_y_tmp,
@@ -969,13 +928,13 @@ def run_forecast(df_y, l_model_trend=None, l_model_season=None,
                 pi_q1=pi_q1,
                 pi_q2=pi_q2,
                 pi_widening_freq=pi_widening_freq,
-                use_cache=use_cache
+                use_cache=use_cache,
             )
             l_dict_result += [dict_result_tmp]
     # Generate output
     dict_result = aggregate_forecast_dict_results(l_dict_result)
     if simplify_output:
-        return dict_result.get('forecast')
+        return dict_result.get("forecast")
     else:
         return dict_result
 
@@ -998,34 +957,32 @@ def aggregate_forecast_dict_results(l_dict_result):
     l_df_forecast = []
 
     for dict_result in l_dict_result:
-        l_df_data += [dict_result['data']]
-        l_df_metadata += [dict_result['metadata']]
-        l_df_optimize_info += [dict_result['optimize_info']]
-        l_df_forecast += [dict_result['forecast']]
+        l_df_data += [dict_result["data"]]
+        l_df_metadata += [dict_result["metadata"]]
+        l_df_optimize_info += [dict_result["optimize_info"]]
+        l_df_forecast += [dict_result["forecast"]]
 
     # Generate output
     df_data = pd.concat(l_df_data, sort=False, ignore_index=True)
     df_metadata = pd.concat(l_df_metadata, sort=False, ignore_index=True)
-    df_optimize_info = pd.concat(
-        l_df_optimize_info,
-        sort=False,
-        ignore_index=True)
+    df_optimize_info = pd.concat(l_df_optimize_info, sort=False, ignore_index=True)
     df_forecast = pd.concat(l_df_forecast, sort=False, ignore_index=True)
 
     return {
-        'forecast': df_forecast,
-        'data': df_data,
-        'metadata': df_metadata,
-        'optimize_info': df_optimize_info}
+        "forecast": df_forecast,
+        "data": df_data,
+        "metadata": df_metadata,
+        "optimize_info": df_optimize_info,
+    }
 
 
 def _get_use_ramp(df_y):
     # Return True if piecewise linear should be used
     # By default,  piecewise linear requires > 2y
-    if 'date' in df_y.columns:
+    if "date" in df_y.columns:
         # Add calendar models
         s_date_tmp = df_y.date
-        if 'weight' in df_y.columns:
+        if "weight" in df_y.columns:
             s_date_tmp = s_date_tmp.loc[df_y.weight > 0]
 
         s_date = s_date_tmp.sort_values().drop_duplicates()
@@ -1036,73 +993,47 @@ def _get_use_ramp(df_y):
         else:
             use_ramp = (
                 # Need more than 2 full years
-                (max_date_delta > pd.Timedelta(2 * 365, unit='d'))
+                max_date_delta > pd.Timedelta(2 * 365, unit="d")
             )
     else:
         use_ramp = False
     return use_ramp
 
 
-def _get_use_calendar(df_y):
-    # Return True if calendar models should be used
-    # use when x
-    if 'date' in df_y.columns:
-        # Add calendar models
-        s_date_tmp = df_y.date
-        if 'weight' in df_y.columns:
-            s_date_tmp = s_date_tmp.loc[df_y.weight > 0]
-
-        s_date = s_date_tmp.sort_values().drop_duplicates()
-        min_date_delta = s_date.diff().min()
-        max_date_delta = s_date.max() - s_date.min()
-
-        if pd.isna(min_date_delta) or pd.isna(max_date_delta):
-            use_calendar = False
-        else:
-            use_calendar = (
-                # Need more than a full year
-                    (max_date_delta > pd.Timedelta(365, unit='d')) &
-                    # Need at least daily samples
-                    (min_date_delta <= pd.Timedelta(1, unit='d'))
-            )
-    else:
-        use_calendar = False
-    return use_calendar
-
-
 def _get_model_is_add_mult(model, add_mult_in, l_model_add):
     """Return add_mult string for a model"""
     # If add_mult_in is add or mult, return that
-    if add_mult_in in ('add', 'mult'):
+    if add_mult_in in ("add", "mult"):
         return add_mult_in
     # Otherwise, need to check if model is in list of additive models
     if model in l_model_add:
-        return 'add'
+        return "add"
     else:
-        return 'mult'
+        return "mult"
 
 
-def run_forecast_single(df_y,
-                        l_model_trend=None,
-                        l_model_season=None,
-                        date_start_actuals=None,
-                        source_id='src',
-                        extrapolate_years=0,
-                        season_add_mult='add',
-                        include_all_fits=False,
-                        simplify_output=True,
-                        find_outliers=False,
-                        l_season_yearly=None,
-                        l_season_weekly=None,
-                        l_model_naive=None,
-                        l_model_calendar=None,
-                        n_cum=1,
-                        pi_q1=5,
-                        pi_q2=20,
-                        pi_widening_freq=None,
-                        # Testing parameters
-                        use_cache=True
-                        ):
+def run_forecast_single(
+    df_y,
+    l_model_trend=None,
+    l_model_season=None,
+    date_start_actuals=None,
+    source_id="src",
+    extrapolate_years=0,
+    season_add_mult="add",
+    include_all_fits=False,
+    simplify_output=True,
+    find_outliers=False,
+    l_season_yearly=None,
+    l_season_weekly=None,
+    l_model_naive=None,
+    l_model_calendar=None,
+    n_cum=1,
+    pi_q1=5,
+    pi_q2=20,
+    pi_widening_freq=None,
+    # Testing parameters
+    use_cache=True,
+):
     """
     Generate forecast for one input time series
 
@@ -1183,7 +1114,7 @@ def run_forecast_single(df_y,
     # source time series
     source = source_id
 
-    if 'date' in df_y.columns:
+    if "date" in df_y.columns:
         freq = detect_freq(df_y.date)
     else:
         freq = None
@@ -1192,32 +1123,30 @@ def run_forecast_single(df_y,
     df_y_unfiltered = df_y.copy()
 
     # Filter: only actuals after date_start_actuals
-    if date_start_actuals is not None and 'date' in df_y.columns:
+    if date_start_actuals is not None and "date" in df_y.columns:
         df_y = df_y.loc[df_y.date >= date_start_actuals]
 
-    date_start_actuals = df_y.date.min() \
-        if 'date' in df_y.columns else df_y.x.min()
-    date_end_actuals = df_y.date.max() \
-        if 'date' in df_y.columns else df_y.x.max()
+    date_start_actuals = df_y.date.min() if "date" in df_y.columns else df_y.x.min()
+    date_end_actuals = df_y.date.max() if "date" in df_y.columns else df_y.x.max()
 
     # If we find outliers, we add a model with dummy variables for the outliers
     if find_outliers:
         mask_step, mask_spike = forecast_models.get_model_outliers(df_y)
         # Make weight = 0 to ignore spike outliers
-        if 'weight' in df_y.columns:
-            df_y['weight'] = df_y['weight'] * (~mask_spike).astype(float)
+        if "weight" in df_y.columns:
+            df_y["weight"] = df_y["weight"] * (~mask_spike).astype(float)
         else:
-            df_y['weight'] = (~mask_spike).astype(float)
+            df_y["weight"] = (~mask_spike).astype(float)
         assert np.issubdtype(df_y.weight.astype(float), np.float64)
         # TODO add models for steps
 
     # Add actuals to output
     # Get weight for metadata
-    if 'weight' not in df_y.columns:
-        df_y['weight'] = 1
-        weights = '1'
+    if "weight" not in df_y.columns:
+        df_y["weight"] = 1
+        weights = "1"
     else:
-        weights = '{}-{}'.format(df_y['weight'].min(), df_y['weight'].max())
+        weights = "{}-{}".format(df_y["weight"].min(), df_y["weight"].max())
 
     # Get long source_id
     if isinstance(date_start_actuals, datetime):
@@ -1226,10 +1155,8 @@ def run_forecast_single(df_y,
     else:
         date_start_actuals_short = date_start_actuals
         date_end_actuals_short = date_end_actuals
-    actuals_x_range = '{}::{}'.format(
-        date_start_actuals_short,
-        date_end_actuals_short)
-    source_long = '{}:{}:{}:{}'.format(source, weights, freq, actuals_x_range)
+    actuals_x_range = f"{date_start_actuals_short}::{date_end_actuals_short}"
+    source_long = f"{source}:{weights}:{freq}:{actuals_x_range}"
     df_actuals = get_df_actuals_clean(df_y, source, source_long)
     l_df_data += [df_actuals]
 
@@ -1238,27 +1165,28 @@ def run_forecast_single(df_y,
         if _get_use_ramp(df_y):
             l_model_trend = [
                 forecast_models.model_linear,
-                forecast_models.model_linear + forecast_models.model_ramp]
+                forecast_models.model_linear + forecast_models.model_ramp,
+            ]
         else:
             l_model_trend = [forecast_models.model_linear]
 
     l_model_season_add = None
     l_model_season_mult = None
     if l_model_season is None:
-        if 'date' in df_y.columns:
+        if "date" in df_y.columns:
             s_date_tmp = df_y.date
-            if 'weight' in df_y.columns:
+            if "weight" in df_y.columns:
                 s_date_tmp = s_date_tmp.loc[df_y.weight > 0]
 
             l_model_season_add = forecast_models.get_l_model_auto_season(
                 s_date_tmp,
-                season_add_mult='add',
+                season_add_mult="add",
                 l_season_yearly=l_season_yearly,
                 l_season_weekly=l_season_weekly,
             )
             l_model_season_mult = forecast_models.get_l_model_auto_season(
                 s_date_tmp,
-                season_add_mult='mult',
+                season_add_mult="mult",
                 l_season_yearly=l_season_yearly,
                 l_season_weekly=l_season_weekly,
             )
@@ -1266,14 +1194,14 @@ def run_forecast_single(df_y,
         l_model_season_add = l_model_season
         l_model_season_mult = l_model_season
 
-    l_model_add = get_list_model(l_model_trend, l_model_season_add, 'add')
-    l_model_mult = get_list_model(l_model_trend, l_model_season_mult, 'mult')
+    l_model_add = get_list_model(l_model_trend, l_model_season_add, "add")
+    l_model_mult = get_list_model(l_model_trend, l_model_season_mult, "mult")
 
-    if l_model_calendar is not None and 'date' in df_y.columns:
+    if l_model_calendar is not None and "date" in df_y.columns:
         # Add calendar models
 
         s_date_tmp = df_y.date
-        if 'weight' in df_y.columns:
+        if "weight" in df_y.columns:
             s_date_tmp = s_date_tmp.loc[df_y.weight > 0]
 
         # Requires daily samples, at least one year worth of data
@@ -1287,55 +1215,53 @@ def run_forecast_single(df_y,
         else:
             use_calendar = (
                 # Need more than a full year
-                    (max_date_delta > pd.Timedelta(365, unit='d')) &
-                    # Need at least daily samples
-                    (min_date_delta <= pd.Timedelta(1, unit='d'))
+                (max_date_delta > pd.Timedelta(365, unit="d"))
+                &
+                # Need at least daily samples
+                (min_date_delta <= pd.Timedelta(1, unit="d"))
             )
         if use_calendar:
-            l_model_add = get_list_model(l_model_add, l_model_calendar, 'add')
-            l_model_mult = get_list_model(
-                l_model_mult, l_model_calendar, 'mult')
+            l_model_add = get_list_model(l_model_add, l_model_calendar, "add")
+            l_model_mult = get_list_model(l_model_mult, l_model_calendar, "mult")
 
-    if season_add_mult == 'auto':  # detect
+    if season_add_mult == "auto":  # detect
         is_mult = model_utils.is_multiplicative(df_y)
-        season_add_mult = 'mult' if is_mult else 'add'
+        season_add_mult = "mult" if is_mult else "add"
 
-    if season_add_mult == 'add':
+    if season_add_mult == "add":
         l_model = l_model_add
-    elif season_add_mult == 'mult':
+    elif season_add_mult == "mult":
         l_model = l_model_mult
     else:  # both
         l_model = list(set(l_model_add + l_model_mult))
     # logger_info('debug l_Model',l_model)
     if l_model_naive is None:
         # Default naive model. To force no naive models, use l_model_naive=[]
-        l_model_naive = [forecast_models.model_snaive_wday] if freq == 'D' \
-            else [forecast_models.model_naive]
+        l_model_naive = (
+            [forecast_models.model_snaive_wday] if freq == "D" else [forecast_models.model_naive]
+        )
     l_model = l_model_naive + l_model
 
     # exclude samples with weight = 0
     df_y = df_y.loc[df_y.weight > 0]
-    date_start_actuals = df_y.date.min() \
-        if 'date' in df_y.columns else df_y.x.min()
+    date_start_actuals = df_y.date.min() if "date" in df_y.columns else df_y.x.min()
     x_start_actuals = df_y.x.min()
 
     # Actuals table with filled x-axis gaps,
     #  used for extrapolation, naive model fitting
     df_actuals_interpolated = (
-        df_y_unfiltered
-            .pipe(model_utils.interpolate_df, interpolate_y=False)
-            .sort_values(['x'])
-            .reset_index(drop=True)
-            # Update weight column in df_actuals_interpolated
-            .drop(columns=['weight'], errors='ignore')
-            .merge(df_y[['x', 'weight']], how='left')
+        df_y_unfiltered.pipe(model_utils.interpolate_df, interpolate_y=False)
+        .sort_values(["x"])
+        .reset_index(drop=True)
+        # Update weight column in df_actuals_interpolated
+        .drop(columns=["weight"], errors="ignore")
+        .merge(df_y[["x", "weight"]], how="left")
     )
-    df_actuals_interpolated['weight'] = \
-        df_actuals_interpolated.weight.fillna(0)
+    df_actuals_interpolated["weight"] = df_actuals_interpolated.weight.fillna(0)
     # Set all 0-weight samples to null
-    df_actuals_interpolated['y'] = \
-        df_actuals_interpolated['y'].where(
-            df_actuals_interpolated.weight > 0., np.NaN)
+    df_actuals_interpolated["y"] = df_actuals_interpolated["y"].where(
+        df_actuals_interpolated.weight > 0.0, np.nan
+    )
 
     # Note - In the above steps, we first remove any samples with weight = 0
     # from df_y, the data used for fitting
@@ -1346,16 +1272,14 @@ def run_forecast_single(df_y,
     l_model.sort()
     for model in l_model:
         dict_fit_model = fit_model(
-            model, df_y, freq, source, df_actuals=df_actuals_interpolated,
-            use_cache=use_cache
+            model, df_y, freq, source, df_actuals=df_actuals_interpolated, use_cache=use_cache
         )
-        df_metadata_tmp = dict_fit_model['metadata']
-        df_optimize_info = dict_fit_model['optimize_info']
+        df_metadata_tmp = dict_fit_model["metadata"]
+        df_optimize_info = dict_fit_model["optimize_info"]
 
         # Add add_mult to metadata
-        metadata_add_mult = _get_model_is_add_mult(
-            model, season_add_mult, l_model_add)
-        df_metadata_tmp['add_mult'] = metadata_add_mult
+        metadata_add_mult = _get_model_is_add_mult(model, season_add_mult, l_model_add)
+        df_metadata_tmp["add_mult"] = metadata_add_mult
 
         l_df_metadata += [df_metadata_tmp]
         l_df_optimize_info += [df_optimize_info]
@@ -1363,7 +1287,6 @@ def run_forecast_single(df_y,
         params = df_metadata_tmp.params.iloc[0]
 
         if df_metadata_tmp.is_fit.iloc[0]:  # If model is fit
-
             # date_start_actuals = df_y.date.min()
             # date_end_actuals = df_y.date.max()
 
@@ -1375,52 +1298,52 @@ def run_forecast_single(df_y,
                 freq,
                 extrapolate_years,
                 x_start_actuals=x_start_actuals,
-                df_actuals=df_actuals_interpolated)
+                df_actuals=df_actuals_interpolated,
+            )
 
-            df_data_tmp = _get_df_fcast_clean(
-                df_data_tmp, source_id, source_long, model.name)
+            df_data_tmp = _get_df_fcast_clean(df_data_tmp, source_id, source_long, model.name)
 
             l_df_data += [df_data_tmp]
 
     # Generate output
     df_data = pd.concat(l_df_data, sort=False, ignore_index=True)
     df_metadata = pd.concat(l_df_metadata, sort=False, ignore_index=True)
-    df_optimize_info = pd.concat(
-        l_df_optimize_info,
-        sort=False,
-        ignore_index=True)
+    df_optimize_info = pd.concat(l_df_optimize_info, sort=False, ignore_index=True)
     # Determine best fits
     df_best_fit = (
         df_metadata.loc[df_metadata.is_fit]
-            .sort_values('aic_c')
-        [['source', 'source_long', 'model']]
-            .groupby('source', as_index=False)
-            .first()
+        .sort_values("aic_c")[["source", "source_long", "model"]]
+        .groupby("source", as_index=False)
+        .first()
     )
-    df_best_fit['is_best_fit'] = True
+    df_best_fit["is_best_fit"] = True
 
-    df_metadata = df_metadata.merge(df_best_fit, how='left')
-    df_metadata['is_best_fit'] = df_metadata['is_best_fit'].fillna(
-        False).astype(bool)
+    df_metadata = df_metadata.merge(df_best_fit, how="left")
+    df_metadata["is_best_fit"] = (
+        df_metadata["is_best_fit"]
+        .where(df_metadata["is_best_fit"].notna(), False)
+        .astype(bool, copy=False)
+    )
     # Adjust weight column - fit_model may be missing filtered 0-weight rows
-    df_metadata['weights'] = weights
-    df_data = df_data.merge(df_best_fit, how='left').reset_index(drop=True)
-    df_data['is_best_fit'] = df_data['is_best_fit'].fillna(False).astype(bool)
+    df_metadata["weights"] = weights
+    df_data = df_data.merge(df_best_fit, how="left").reset_index(drop=True)
+    df_data["is_best_fit"] = (
+        df_data["is_best_fit"].where(df_data["is_best_fit"].notna(), False).astype(bool, copy=False)
+    )
 
     if not include_all_fits:
-        df_metadata = df_metadata.loc[df_metadata.is_best_fit].reset_index(
-            drop=True)
-        df_data = df_data.loc[df_data.is_best_fit |
-                              df_data.is_actuals].reset_index(drop=True)
+        df_metadata = df_metadata.loc[df_metadata.is_best_fit].reset_index(drop=True)
+        df_data = df_data.loc[df_data.is_best_fit | df_data.is_actuals].reset_index(drop=True)
 
-    df_forecast = df_data.pipe(get_pi, n_sims=100, n_cum=n_cum,
-                               pi_q1=pi_q1, pi_q2=pi_q2,
-                               widening_freq=pi_widening_freq)
+    df_forecast = df_data.pipe(
+        get_pi, n_sims=100, n_cum=n_cum, pi_q1=pi_q1, pi_q2=pi_q2, widening_freq=pi_widening_freq
+    )
     dict_result = {
-        'forecast': df_forecast,
-        'data': df_data,
-        'metadata': df_metadata,
-        'optimize_info': df_optimize_info}
+        "forecast": df_forecast,
+        "data": df_data,
+        "metadata": df_metadata,
+        "optimize_info": df_optimize_info,
+    }
 
     if simplify_output:
         return df_forecast
@@ -1429,15 +1352,19 @@ def run_forecast_single(df_y,
 
 
 # TODO: REMOVE THIS FUNCTION
-def run_l_forecast(l_fcast_input,
-                   col_name_y='y', col_name_weight='weight',
-                   col_name_x='x', col_name_date='date',
-                   col_name_source='source',
-                   extrapolate_years=0, season_add_mult='add',
-                   include_all_fits=False,
-                   find_outliers=False,
-                   use_cache=True
-                   ):
+def run_l_forecast(
+    l_fcast_input,
+    col_name_y="y",
+    col_name_weight="weight",
+    col_name_x="x",
+    col_name_date="date",
+    col_name_source="source",
+    extrapolate_years=0,
+    season_add_mult="add",
+    include_all_fits=False,
+    find_outliers=False,
+    use_cache=True,
+):
     """
     Generate forecasts for a list of SolverConfig objects, each including
     a time series, model functions, and other configuration parameters.
@@ -1504,7 +1431,7 @@ def run_l_forecast(l_fcast_input,
             include_all_fits,
             simplify_output=False,
             find_outliers=find_outliers,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
         l_dict_result += [dict_result]
 
@@ -1514,6 +1441,7 @@ def run_l_forecast(l_fcast_input,
 
 # Forecast configuration
 
+
 # TODO: REMOVE THIS CLASS
 class ForecastInput:
     """
@@ -1521,60 +1449,46 @@ class ForecastInput:
     """
 
     def __init__(
-            self,
-            source_id,
-            df_y,
-            l_model_trend=None,
-            l_model_season=None,
-            weights_y_values=1.0,
-            date_start_actuals=None):
+        self,
+        source_id,
+        df_y,
+        l_model_trend=None,
+        l_model_season=None,
+        weights_y_values=1.0,
+        date_start_actuals=None,
+    ):
         self.source_id = source_id
         self.df_y = df_y
-        self.l_model_trend = l_model_trend if l_model_trend is not None else [
-            forecast_models.model_linear]
+        self.l_model_trend = (
+            l_model_trend if l_model_trend is not None else [forecast_models.model_linear]
+        )
         self.l_model_season = l_model_season
         self.weights_y_values = weights_y_values
         self.date_start_actuals = date_start_actuals
 
     def __str__(self):
         str_result = (
-            'SolverConfig: {source_id} ; {df_y_shape} ; {weights_y_values};'
-            ' {l_model_trend}; {l_model_season} ; {date_start_actuals}').\
-            format(
-            source_id=self.source_id,
-            df_y_shape=self.df_y.shape,
-            l_model_trend=to_str_function_list(
-                self.l_model_trend),
-            l_model_season=to_str_function_list(
-                self.l_model_season),
-            weights_y_values=self.weights_y_values,
-            date_start_actuals=self.date_start_actuals)
+            f"SolverConfig: {self.source_id} ; {self.df_y.shape} ; {self.weights_y_values};"
+            f" {to_str_function_list(self.l_model_trend)}; {to_str_function_list(self.l_model_season)} ; {self.date_start_actuals}"
+        )
         return str_result
 
     def __repr__(self):
         return self.__str__()
 
-    # TODO: REMOVE
-    @classmethod
-    def create(cls, source_id, df_y, l_model_trend, l_model_season=None,
-               weights_y_values=1.0, date_start_actuals=None):
-        return cls(source_id, df_y, pd.Series(l_model_trend), l_model_season,
-                   weights_y_values, date_start_actuals)
-
 
 def _get_days_from_freq(freq):
-    if freq.startswith('Y'):
+    if freq.startswith("Y"):
         return 365
-    elif freq.startswith('M'):
+    elif freq.startswith("M"):
         return 30
-    elif freq.startswith('W'):
+    elif freq.startswith("W"):
         return 7
     else:
         return 1
 
 
-def get_pi(df_forecast, n_sims=100, n_cum=None,
-           pi_q1=5, pi_q2=20, widening_freq='Y'):
+def get_pi(df_forecast, n_sims=100, n_cum=None, pi_q1=5, pi_q2=20, widening_freq="Y"):
     """
     Generate prediction intervals for a table with multiple forecasts,
     using bootstrapped residuals.
@@ -1606,27 +1520,36 @@ def get_pi(df_forecast, n_sims=100, n_cum=None,
     Based on https://otexts.org/fpp2/prediction-intervals.html
     """
     if n_cum is not None:
-        logger.info('get_pi: parameter n_cum is deprecated, '
-                    'please use widening_freq instead')
+        logger.info("get_pi: parameter n_cum is deprecated, please use widening_freq instead")
     else:
         n_cum = _get_days_from_freq(widening_freq)
 
-    if 'source' in df_forecast.columns and df_forecast.source.nunique() > 1:
+    if "source" in df_forecast.columns and df_forecast.source.nunique() > 1:
+
+        def _process_source_group(grp, source_name):
+            # Add source column back since include_groups=False excludes it
+            grp = grp.copy()
+            grp["source"] = source_name
+            result = _get_pi_single_source(
+                grp, n_sims=n_sims, n_cum=n_cum, pi_q1=pi_q1, pi_q2=pi_q2
+            )
+            return result
+
         df_result = (
-            df_forecast.groupby('source', as_index=False)
-                .apply(_get_pi_single_source,
-                       n_sims=n_sims, n_cum=n_cum, pi_q1=pi_q1, pi_q2=pi_q2)
-                .sort_values(['source', 'is_actuals', 'date'])
-                .reset_index(drop=True)
+            df_forecast.groupby("source", group_keys=False)
+            .apply(
+                lambda grp: _process_source_group(grp, grp.name),
+                include_groups=False,
+            )
+            .sort_values(["source", "is_actuals", "date"])
+            .reset_index(drop=True)
         )
     else:
-        df_result = _get_pi_single_source(
-            df_forecast, n_sims, n_cum, pi_q1, pi_q2)
+        df_result = _get_pi_single_source(df_forecast, n_sims, n_cum, pi_q1, pi_q2)
     return df_result
 
 
-def _df_add_pi_percentiles(df_fcast, a_sample,
-                           pi_q1=5, pi_q2=20):
+def _df_add_pi_percentiles(df_fcast, a_sample, pi_q1=5, pi_q2=20):
     """
     Given a forecast dataframe and an array of bootstrapped residual samples,
     add quantile columns (defining prediction interval) to forecast dataframe
@@ -1644,8 +1567,7 @@ def _df_add_pi_percentiles(df_fcast, a_sample,
     assert 0 < pi_q1 < 100 and 0 < pi_q2 < 100
     l_percentiles = pi_q1, 100 - pi_q1, pi_q2, 100 - pi_q2
     # dict of arrays with percentile values
-    dict_q = {'q{}'.format(q): np.percentile(a_sample, q, axis=0)
-              for q in l_percentiles}
+    dict_q = {f"q{q}": np.percentile(a_sample, q, axis=0) for q in l_percentiles}
 
     df_fcast = df_fcast.copy()
     for q in dict_q.keys():
@@ -1653,8 +1575,7 @@ def _df_add_pi_percentiles(df_fcast, a_sample,
     return df_fcast
 
 
-def _get_pi_single_source(df_forecast, n_sims=100, n_cum=1,
-                          pi_q1=5, pi_q2=20):
+def _get_pi_single_source(df_forecast, n_sims=100, n_cum=1, pi_q1=5, pi_q2=20):
     """
     Generate prediction interval for a single forecast
 
@@ -1673,11 +1594,14 @@ def _get_pi_single_source(df_forecast, n_sims=100, n_cum=1,
     :rtype: pandas.DataFrame
     """
 
-    if 'is_best_fit' in df_forecast.columns:
-        df_forecast = df_forecast.loc[df_forecast.is_actuals |
-                                      df_forecast.is_best_fit].copy()
+    if "is_best_fit" in df_forecast.columns:
+        df_forecast = df_forecast.loc[df_forecast.is_actuals | df_forecast.is_best_fit].copy()
     else:
         df_forecast = df_forecast.copy()
+
+    # Drop outlier-flagged actuals (weight == 0) to avoid skewing intervals
+    if "weight" in df_forecast.columns:
+        df_forecast = df_forecast.loc[(df_forecast.weight > 0) | (~df_forecast.is_actuals)]
     # Date column may hold integer data from x column, if input had no date
     if pd.api.types.is_numeric_dtype(df_forecast.date):
         freq_days = 1
@@ -1685,63 +1609,52 @@ def _get_pi_single_source(df_forecast, n_sims=100, n_cum=1,
         freq = detect_freq(df_forecast)
         freq_days = _get_days_from_freq(freq)
     # Adjust n_cum by sampling frequency
-    n_cum_raw = n_cum  # For debugging purposes
     n_cum = int(n_cum / freq_days)
     if n_cum < 1:  # Avoid divide by 0
         n_cum = 1
 
-    if 'source' in df_forecast.columns:
-        l_cols = ['date', 'source']
+    if "source" in df_forecast.columns:
+        l_cols = ["date", "source"]
     else:
-        l_cols = ['date']
+        l_cols = ["date"]
 
-    if 'weight' in df_forecast.columns and (df_forecast.weight == 0).any():
-
+    if "weight" in df_forecast.columns and (df_forecast.weight == 0).any():
         # Filter out dates for outliers with weight=0
-        df_filtered_dates = (
-            df_forecast.loc[(df_forecast.weight > 0) &
-                            (df_forecast.is_actuals)]
-            [['date', 'source']]
-        )
+        df_filtered_dates = df_forecast.loc[(df_forecast.weight > 0) & (df_forecast.is_actuals)][
+            ["date", "source"]
+        ]
 
         # Take filtered actuals
-        df_actuals_unfiltered = df_forecast.loc[df_forecast.is_actuals &
-                                                ~df_forecast.y.isnull()]
-        df_actuals = (df_actuals_unfiltered[['date', 'y']]
-                      .merge(df_filtered_dates, how='inner')
-                      .rename({'y': 'actuals'}, axis=1)
-                      )
+        df_actuals_unfiltered = df_forecast.loc[df_forecast.is_actuals & ~df_forecast.y.isnull()]
+        df_actuals = (
+            df_actuals_unfiltered[["date", "y"]]
+            .merge(df_filtered_dates, how="inner")
+            .rename({"y": "actuals"}, axis=1)
+        )
         date_last_actuals = df_actuals.date.max()
     else:  # No weight data - use all actuals rows
-        df_actuals_unfiltered = df_forecast.loc[df_forecast.is_actuals &
-                                                ~df_forecast.y.isnull()]
-        df_actuals = (df_actuals_unfiltered[['date', 'y']]
-                      .rename({'y': 'actuals'}, axis=1)
-                      )
+        df_actuals_unfiltered = df_forecast.loc[df_forecast.is_actuals & ~df_forecast.y.isnull()]
+        df_actuals = df_actuals_unfiltered[["date", "y"]].rename({"y": "actuals"}, axis=1)
         date_last_actuals = df_actuals.date.max()
     # Compute residuals for filtered actuals
-    df_residuals_tmp = df_forecast.loc[
-        ~df_forecast.is_actuals & ~df_forecast.y.pipe(
-            pd.isnull)][l_cols + ['model', 'y']]
+    df_residuals_tmp = df_forecast.loc[~df_forecast.is_actuals & ~df_forecast.y.pipe(pd.isnull)][
+        l_cols + ["model", "y"]
+    ]
 
-    df_residuals = df_residuals_tmp.merge(df_actuals, how='inner')
-    df_residuals['res'] = df_residuals['actuals'] - df_residuals['y']
+    df_residuals = df_residuals_tmp.merge(df_actuals, how="inner")
+    df_residuals["res"] = df_residuals["actuals"] - df_residuals["y"]
 
     # Filter out null values, e.g. due to null actuals
     df_residuals = df_residuals.loc[~df_residuals.res.isnull()]
 
     if df_residuals.empty:  # May happen if no forecast could be generated
-        logger.warning(
-            'No forecast data for source %s',
-            df_forecast.source.head(1).iloc[0])
-        return df_actuals_unfiltered[l_cols + ['is_actuals', 'model', 'y']]
+        logger.warning("No forecast data for source %s", df_forecast.source.head(1).iloc[0])
+        return df_actuals_unfiltered[l_cols + ["is_actuals", "model", "y"]]
 
     # Generate table with prediction interval
-    df_forecast_pi = (
-        df_forecast.loc[~df_forecast.is_actuals &
-                        (df_forecast.date > date_last_actuals)]
-        [l_cols + ['model', 'y']]
-    )
+    df_forecast_pi = df_forecast.loc[
+        ~df_forecast.is_actuals & (df_forecast.date > date_last_actuals)
+    ][l_cols + ["model", "y"]]
 
     s_residuals = df_residuals.res
     # Residuals series with non-null mean lead to skewed PIs
@@ -1754,52 +1667,41 @@ def _get_pi_single_source(df_forecast, n_sims=100, n_cum=1,
     n_samples_short = int(np.ceil(n_samples_fcast / n_cum))
 
     # Series to widen prediction interval every n_cum samples
-    a_sample_pi_cum = (
-        s_residuals
-        .sample(n_samples_short * n_sims, replace=True)
-        .values.reshape(n_sims, n_samples_short)
+    a_sample_pi_cum = s_residuals.sample(n_samples_short * n_sims, replace=True).values.reshape(
+        n_sims, n_samples_short
     )
     a_sample_pi_cum = np.cumsum(a_sample_pi_cum, axis=1)
     # TODO: REPLACE NP.REPEAT WITH INTERPOLATE
-    a_sample_pi_cum_expanded = (
-        np.repeat(a_sample_pi_cum, n_cum, axis=1)
-        [:, :n_samples_fcast]
-    )
+    a_sample_pi_cum_expanded = np.repeat(a_sample_pi_cum, n_cum, axis=1)[:, :n_samples_fcast]
     # Series with residuals samples - base width of prediction interval
-    a_sample_base = (
-        s_residuals
-            .sample(n_samples_fcast * n_sims, replace=True)
-            .values.reshape(n_sims, n_samples_fcast)
+    a_sample_base = s_residuals.sample(n_samples_fcast * n_sims, replace=True).values.reshape(
+        n_sims, n_samples_fcast
     )
     a_sample = a_sample_base + a_sample_pi_cum_expanded
 
-    df_forecast_pi = _df_add_pi_percentiles(
-        df_forecast_pi, a_sample, pi_q1, pi_q2)
+    df_forecast_pi = _df_add_pi_percentiles(df_forecast_pi, a_sample, pi_q1, pi_q2)
 
-    df_forecast_pi['is_actuals'] = False
+    df_forecast_pi["is_actuals"] = False
 
     # Past forecast samples, constant width prediction interval
-    df_forecast_past = (
-        df_forecast.loc[~df_forecast.is_actuals &
-                        (df_forecast.date <= date_last_actuals)]
-        [l_cols + ['model', 'is_actuals', 'y']]
-    )
+    df_forecast_past = df_forecast.loc[
+        ~df_forecast.is_actuals & (df_forecast.date <= date_last_actuals)
+    ][l_cols + ["model", "is_actuals", "y"]]
     n_samples_fcast_past = df_forecast_past.index.size
-    a_sample_past = (
-        s_residuals
-        .sample(n_samples_fcast_past * n_sims, replace=True)
-        .values.reshape(n_sims, n_samples_fcast_past)
+    a_sample_past = s_residuals.sample(n_samples_fcast_past * n_sims, replace=True).values.reshape(
+        n_sims, n_samples_fcast_past
     )
-    df_forecast_past = _df_add_pi_percentiles(
-        df_forecast_past, a_sample_past, pi_q1, pi_q2)
+    df_forecast_past = _df_add_pi_percentiles(df_forecast_past, a_sample_past, pi_q1, pi_q2)
 
-    df_actuals_unfiltered = df_actuals_unfiltered[
-        l_cols + ['is_actuals', 'model', 'y']]
-    df_pi_result = pd.concat([df_actuals_unfiltered,
-                              df_forecast_past,
-                              df_forecast_pi,
-                              ],
-                             sort=False,
-                             ignore_index=True)
+    df_actuals_unfiltered = df_actuals_unfiltered[l_cols + ["is_actuals", "model", "y"]]
+    df_pi_result = pd.concat(
+        [
+            df_actuals_unfiltered,
+            df_forecast_past,
+            df_forecast_pi,
+        ],
+        sort=False,
+        ignore_index=True,
+    )
 
     return df_pi_result

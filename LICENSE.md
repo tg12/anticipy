@@ -1,5 +1,13 @@
 BSD 3-Clause License
 
+---
+
+**Fork Notice**: This repository is a fork of the original Anticipy project.
+Original work: https://github.com/sky-uk/anticipy
+Fork maintainer assumes no legal responsibility for use of this software.
+
+---
+
 Copyright (c) 2018, Sky UK Ltd
 All rights reserved.
 

@@ -1,39 +1,34 @@
-[![Latest Release](https://img.shields.io/pypi/v/anticipy.svg)](https://img.shields.io/pypi/v/anticipy.svg)
-[![Build Status](https://travis-ci.com/sky-uk/anticipy.svg?branch=master)](https://travis-ci.com/sky-uk/anticipy)
-[![Documentation Status](https://readthedocs.org/projects/anticipy/badge/?version=latest)](https://anticipy.readthedocs.io/en/latest/?badge=latest)
-[![Code Coverage](https://codecov.io/github/sky-uk/anticipy/branch/master/graph/badge.svg)](https://codecov.io/github/sky-uk/anticipy/)
-[![pulls](https://img.shields.io/docker/pulls/skyuk/anticipy.svg)](https://hub.docker.com/r/skyuk/anticipy)
+# anticipy-sawyer
 
+> **Fork Notice**: This is an independently maintained fork of the original [Anticipy](https://github.com/sky-uk/anticipy) project by Sky UK Ltd. This fork is provided "as-is" without warranty of any kind. The maintainer of this fork assumes no legal responsibility for its use. See the original project for the authoritative source. Licensed under BSD 3-Clause (see [LICENSE.md](LICENSE.md)).
 
+Maintained fork of the original Anticipy forecasting toolkit. This fork keeps the API compatible while refreshing dependencies, tooling, and packaging for modern Python versions.
 
-# Anticipy
+- Install from PyPI: `pip install anticipy-sawyer`
+- Imports remain `anticipy`, and the CLI entry point is `anticipy-forecast`.
+- Original documentation remains useful at [anticipy.readthedocs.io](https://anticipy.readthedocs.io/en/latest/).
 
-Anticipy is a tool to generate forecasts for time series. It takes a pandas Series or DataFrame as input, and
-returns a DataFrame with the forecasted values for a given period of time.
+## Features
 
-Features:
+- Simple interface: single-call forecasting on a pandas DataFrame.
+- Model selection: compare multiple candidate models (linear, sigmoidal, exponential, and more).
+- Trend and seasonality: weekly and monthly seasonality support.
+- Calendar events: incorporate holiday/event calendars to improve fit.
+- Data cleaning: outlier detection and step-change handling.
 
-* **Simple interface**. Start forecasting with a single function call on a pandas DataFrame.
-* **Model selection**. If you provide different multiple models (e.g. linear, sigmoidal, exponential), the tool will
-  compare them and choose the best fit for your data.
-* **Trend and seasonality**. Support for weekly and monthly seasonality, among other types.
-* **Calendar events**. Provide lists of special dates, such as holiday seasons or bank holidays, to improve model
-  performance.
-* **Data cleaning**. The library has tools to identify and remove outliers, and to detect and handle step changes in
-  the data.
-
-It is straightforward to generate a simple linear model with the tool - just call forecast.run_forecast(my_dataframe):
+## Quickstart
 
 ```python
-   import pandas as pd, numpy as np
-   from anticipy import forecast
-   
-   df = pd.DataFrame({'y': np.arange(0., 5)}, index=pd.date_range('2018-01-01', periods=5, freq='D'))
-   df_forecast = forecast.run_forecast(df, extrapolate_years=1)
-   print(df_forecast.head(12))
+import numpy as np
+import pandas as pd
+from anticipy import forecast
+
+df = pd.DataFrame({'y': np.arange(0.0, 5)}, index=pd.date_range('2018-01-01', periods=5, freq='D'))
+df_forecast = forecast.run_forecast(df, extrapolate_years=1)
+print(df_forecast.head(12))
 ```
 
-Output:
+Example output:
 
 ```
    .        date   model             y  is_actuals
@@ -51,5 +46,15 @@ Output:
    11 2018-01-07  linear  6.000000e+00       False
 ```
 
+## Fork highlights
 
-Documentation is available in [Read the Docs](https://anticipy.readthedocs.io/en/latest/)
+- Updated runtime stack (numpy 2.x, pandas 2.2+, SciPy 1.14+, Plotly 5.22+).
+- Added Ruff configuration and dev extras (`pip install -e .[dev,extras]`) for linting and notebooks.
+- Cleaned unused imports and variables flagged by Ruff and Vulture.
+- Fixed console entry point to target `anticipy.app:main`.
+
+## Development
+
+1. Create an environment targeting Python 3.10+: `python -m venv .venv && source .venv/bin/activate`
+2. Install with dev and notebook extras: `pip install -e .[dev,extras]`
+3. Run checks: `ruff check .`, `vulture anticipy tests`, then `pytest`.

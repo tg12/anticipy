@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # License:          This module is released under the terms of the LICENSE file
 #                   contained within this applications INSTALL directory
@@ -13,11 +12,13 @@ Functions to plot forecast outputs
 # docstrings
 
 # -- Public Imports
-import os
+import importlib.util
 import logging
+import os
+import webbrowser
+
 import numpy as np
 import pandas as pd
-import webbrowser
 
 # -- Globals
 logger = logging.getLogger(__name__)
@@ -27,34 +28,38 @@ try:
 
     _matplotlib_imported = True
 except ImportError:
-    logger.info('Matplotlib not available, skipping importing library...')
+    logger.info("Matplotlib not available, skipping importing library...")
     _matplotlib_imported = False
 
 try:
     import plotly as py
-    from plotly import tools
-    from plotly import subplots
     import plotly.graph_objs as go
+    from plotly import subplots
 
     _plotly_imported = True
 except ImportError:
-    logger.info('Plotly not available, skipping importing library...')
+    logger.info("Plotly not available, skipping importing library...")
     _plotly_imported = False
 
-try:
-    import IPython
-
-    _ipython_imported = True
-except ImportError:
-    logger.info('IPython not available, skipping importing library...')
-    _ipython_imported = False
+_ipython_imported = importlib.util.find_spec("IPython") is not None
+if not _ipython_imported:
+    logger.info("IPython not available, skipping importing library...")
 
 
 # ---- Plotting functions
-def _matplotlib_forecast_create(df_fcast, subplots, sources, nrows, ncols,
-                                width=None, height=None, title=None, dpi=70,
-                                show_legend=True,
-                                include_interval=False):
+def _matplotlib_forecast_create(
+    df_fcast,
+    subplots,
+    sources,
+    nrows,
+    ncols,
+    width=None,
+    height=None,
+    title=None,
+    dpi=70,
+    show_legend=True,
+    include_interval=False,
+):
     """
     Creates matplotlib plot from forecast dataframe
 
@@ -87,22 +92,32 @@ def _matplotlib_forecast_create(df_fcast, subplots, sources, nrows, ncols,
     :return: The plot
     :rtype: matplotlib plot instance
     """
-    assert _matplotlib_imported, 'Error: matplotlib not installed. Please ' \
-                                 'run pip install plotly, then import.'
+    assert _matplotlib_imported, (
+        "Error: matplotlib not installed. Please run pip install plotly, then import."
+    )
     # Default palette from ggplot
-    act_col = '#00BFC4'
-    for_col = '#F8766D'
-    plt.style.use('ggplot')
+    act_col = "#00BFC4"
+    for_col = "#F8766D"
+    plt.style.use("ggplot")
     figsize = (width / dpi, height / dpi)
 
     # Clean actuals - weights do not get plotted
-    df_fcast = df_fcast.loc[df_fcast.model != 'weight']
+    df_fcast = df_fcast.loc[df_fcast.model != "weight"]
 
     # create the DatetimeIndex
-    df_fcast = df_fcast.set_index('date')
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize,
-                             dpi=dpi, squeeze=False)
-    fig.canvas.set_window_title(title)
+    df_fcast = df_fcast.set_index("date")
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=figsize,
+        dpi=dpi,
+        squeeze=False,
+    )
+    manager = getattr(fig, "canvas", None)
+    if manager and getattr(manager, "manager", None):
+        set_title = getattr(manager.manager, "set_window_title", None)
+        if set_title:
+            set_title(title)
 
     x = 0
     y = 0
@@ -112,46 +127,65 @@ def _matplotlib_forecast_create(df_fcast, subplots, sources, nrows, ncols,
         if not subplots:
             source_filt = True
         else:
-            source_filt = df_fcast['source'] == src
+            source_filt = df_fcast["source"] == src
 
-        actuals, = ax.plot(
-            df_fcast.loc[source_filt & df_fcast['is_actuals'], :].index,
-            df_fcast.loc[source_filt & df_fcast['is_actuals'], 'y'],
-            color=act_col, marker='o', linestyle='None', label='Actuals')
-        forecast, = ax.plot(
-            df_fcast.loc[source_filt & ~df_fcast['is_actuals'], :].index,
-            df_fcast.loc[source_filt & ~df_fcast['is_actuals'], 'y'],
-            color=for_col, marker='None', linestyle='solid', label='Forecast')
+        (actuals,) = ax.plot(
+            df_fcast.loc[source_filt & df_fcast["is_actuals"], :].index,
+            df_fcast.loc[source_filt & df_fcast["is_actuals"], "y"],
+            color=act_col,
+            marker="o",
+            linestyle="None",
+            label="Actuals",
+        )
+        (forecast,) = ax.plot(
+            df_fcast.loc[source_filt & ~df_fcast["is_actuals"], :].index,
+            df_fcast.loc[source_filt & ~df_fcast["is_actuals"], "y"],
+            color=for_col,
+            marker="None",
+            linestyle="solid",
+            label="Forecast",
+        )
 
         # Fill area between 5th and 95th prediction interval
-        if include_interval and \
-                ('q5' in df_fcast.columns) and ('q95' in df_fcast.columns):
-            where_to_fill = (source_filt &
-                             (~df_fcast['is_actuals']) &
-                             (~df_fcast['q5'].isnull()) &
-                             (~df_fcast['q95'].isnull()))
-            ax.fill_between(df_fcast.index, df_fcast['q5'], df_fcast['q95'],
-                            where=where_to_fill,
-                            facecolor=for_col, alpha=0.2)
+        if include_interval and ("q5" in df_fcast.columns) and ("q95" in df_fcast.columns):
+            where_to_fill = (
+                source_filt
+                & (~df_fcast["is_actuals"])
+                & (~df_fcast["q5"].isnull())
+                & (~df_fcast["q95"].isnull())
+            )
+            ax.fill_between(
+                df_fcast.index,
+                df_fcast["q5"],
+                df_fcast["q95"],
+                where=where_to_fill,
+                facecolor=for_col,
+                alpha=0.2,
+            )
 
-        if include_interval and\
-                ('q20' in df_fcast.columns) and ('q80' in df_fcast.columns):
+        if include_interval and ("q20" in df_fcast.columns) and ("q80" in df_fcast.columns):
             # Fill area between 20th and 80th prediction interval
-            where_to_fill_2 = (source_filt &
-                               (~df_fcast['is_actuals']) &
-                               (~df_fcast['q20'].isnull()) &
-                               (~df_fcast['q80'].isnull()))
-            ax.fill_between(df_fcast.index, df_fcast['q20'], df_fcast['q80'],
-                            where=where_to_fill_2,
-                            facecolor=for_col, alpha=0.2)
+            where_to_fill_2 = (
+                source_filt
+                & (~df_fcast["is_actuals"])
+                & (~df_fcast["q20"].isnull())
+                & (~df_fcast["q80"].isnull())
+            )
+            ax.fill_between(
+                df_fcast.index,
+                df_fcast["q20"],
+                df_fcast["q80"],
+                where=where_to_fill_2,
+                facecolor=for_col,
+                alpha=0.2,
+            )
 
         if subplots:
             # Set the title of each subplot as per source name
             ax.set_title(src)
 
         if show_legend:
-            ax.legend(handles=[actuals, forecast],
-                      labels=['Actuals', 'Forecast'], loc='upper left')
+            ax.legend(handles=[actuals, forecast], labels=["Actuals", "Forecast"], loc="upper left")
 
         y += 1
         if y >= ncols:
@@ -171,13 +205,21 @@ def _matplotlib_forecast_create(df_fcast, subplots, sources, nrows, ncols,
     return plt.Figure
 
 
-def _plotly_forecast_create(df_fcast, subplots, sources, nrows, ncols,
-                            width=None, height=None, title=None,
-                            show_legend=False, add_rangeslider=False,
-                            include_interval=False,
-                            pi_q1=5,
-                            pi_q2=20
-                            ):
+def _plotly_forecast_create(
+    df_fcast,
+    use_subplots,
+    sources,
+    nrows,
+    ncols,
+    width=None,
+    height=None,
+    title=None,
+    show_legend=False,
+    add_rangeslider=False,
+    include_interval=False,
+    pi_q1=5,
+    pi_q2=20,
+):
     """
     Creates matplotlib plot from forecast dataframe
 
@@ -188,8 +230,8 @@ def _plotly_forecast_create(df_fcast, subplots, sources, nrows, ncols,
       |  - y (float) : Value of the time series in that sample
       |  - is_actuals (bool) : True for actuals samples, False for forecast
     :type df_fcast: pandas.DataFrame
-    :param subplots: Indicates whether a facet grid will be required
-    :type subplots: bool
+    :param use_subplots: Indicates whether a facet grid will be required
+    :type use_subplots: bool
     :param sources: Includes the various sources
     :type sources:
     :param nrows: Number of rows
@@ -216,24 +258,25 @@ def _plotly_forecast_create(df_fcast, subplots, sources, nrows, ncols,
     :return: The plot
     :rtype: plotly plot instance
     """
-    assert _plotly_imported, 'Error: plotly not installed. Please run pip ' \
-                             'install plotly, then import the library'
+    assert _plotly_imported, (
+        "Error: plotly not installed. Please run pip install plotly, then import the library"
+    )
 
-    vertical_spacing = 50. / height if height is not None else 0.1
+    vertical_spacing = 50.0 / height if height is not None else 0.1
 
-    if subplots:
+    if use_subplots:
         titles = map(str, sources)
-        fig = py.subplots.make_subplots(
+        fig = subplots.make_subplots(
             rows=nrows,
             cols=ncols,
             subplot_titles=list(titles),
             print_grid=False,
             horizontal_spacing=0.08,
-            vertical_spacing=vertical_spacing)
+            vertical_spacing=vertical_spacing,
+        )
         margin_top = 60
     else:
-        fig = py.subplots.make_subplots(
-            rows=nrows, cols=ncols, print_grid=False)
+        fig = subplots.make_subplots(rows=nrows, cols=ncols, print_grid=False)
         margin_top = 30
 
     x = 1
@@ -244,79 +287,79 @@ def _plotly_forecast_create(df_fcast, subplots, sources, nrows, ncols,
 
     for src in sources:
         # Filter the specific source is subplots
-        if not subplots:
+        if not use_subplots:
             source_filt = True
             # actuals_name = 'Actuals'
             # forecasts_name = 'Forecast'
         else:
-            source_filt = df_fcast['source'] == src
+            source_filt = df_fcast["source"] == src
             # actuals_name = '{} Actuals'.format(str(src))
             # forecasts_name = '{} Forecast'.format(str(src))
 
-        actuals_name = 'Actuals'
-        forecasts_name = 'Forecast'
+        actuals_name = "Actuals"
+        forecasts_name = "Forecast"
 
         actuals = go.Scatter(
-            x=df_fcast.loc[source_filt & df_fcast['is_actuals']].date,
-            y=df_fcast.loc[source_filt & df_fcast['is_actuals']].y,
+            x=df_fcast.loc[source_filt & df_fcast["is_actuals"]].date,
+            y=df_fcast.loc[source_filt & df_fcast["is_actuals"]].y,
             name=actuals_name,
-            line=dict(color='rgba(0,191,196,0.2)'),
-            marker=dict(color='rgba(0,191,196,0.9)', size=3),
-            mode='lines+markers',
+            line=dict(color="rgba(0,191,196,0.2)"),
+            marker=dict(color="rgba(0,191,196,0.9)", size=3),
+            mode="lines+markers",
             opacity=0.8,
-            legendgroup='actuals',
+            legendgroup="actuals",
             showlegend=is_first_source,
-            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}"
+            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
         )
 
         fig.add_trace(actuals, x, y)
 
         forecast = go.Scatter(
-            x=df_fcast.loc[source_filt & ~df_fcast['is_actuals']].date,
-            y=df_fcast.loc[source_filt & ~df_fcast['is_actuals']].y,
+            x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
+            y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].y,
             name=forecasts_name,
-            line=dict(color='rgba(248,118,109,0.4)', width=1),
-            marker=dict(color='rgba(248,118,109,0.9)', size=3),
-            mode='lines+markers',
-            legendgroup='forecast',
+            line=dict(color="rgba(248,118,109,0.4)", width=1),
+            marker=dict(color="rgba(248,118,109,0.9)", size=3),
+            mode="lines+markers",
+            legendgroup="forecast",
             showlegend=is_first_source,
-            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}"
+            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
         )
 
         fig.add_trace(forecast, x, y)
         for pi_q in [pi_q1, pi_q2]:
             # Fill prediction interval area
-            str_q_low = 'q{}'.format(pi_q)
-            str_q_hi = 'q{}'.format(100 - pi_q)
-            if include_interval and \
-                    (str_q_low in df_fcast.columns) and \
-                    (str_q_hi in df_fcast.columns):
+            str_q_low = f"q{pi_q}"
+            str_q_hi = f"q{100 - pi_q}"
+            if (
+                include_interval
+                and (str_q_low in df_fcast.columns)
+                and (str_q_hi in df_fcast.columns)
+            ):
                 q_low = go.Scatter(
-                    x=df_fcast.loc[source_filt & ~df_fcast['is_actuals']].date,
-                    y=df_fcast.loc[source_filt & ~df_fcast['is_actuals']]
-                    [str_q_low],
-                    name="{}% PI".format(pi_q),
-                    line=dict(color='#F8766D', width=0),
-                    mode='lines',
+                    x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
+                    y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_low],
+                    name=f"{pi_q}% PI",
+                    line=dict(color="#F8766D", width=0),
+                    mode="lines",
                     showlegend=False,
-                    legendgroup='forecast',
-                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}"
+                    legendgroup="forecast",
+                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
                 )
 
                 fig.add_trace(q_low, x, y)
 
                 q_hi = go.Scatter(
-                    x=df_fcast.loc[source_filt & ~df_fcast['is_actuals']].date,
-                    y=df_fcast.loc[source_filt & ~df_fcast['is_actuals']]
-                    [str_q_hi],
-                    name="{}% PI".format(100 - pi_q),
-                    fill='tonexty',
-                    fillcolor='rgba(248,118,109,0.2)',
-                    line=dict(color='#F8766D', width=0),
-                    mode='lines',
+                    x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
+                    y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_hi],
+                    name=f"{100 - pi_q}% PI",
+                    fill="tonexty",
+                    fillcolor="rgba(248,118,109,0.2)",
+                    line=dict(color="#F8766D", width=0),
+                    mode="lines",
                     showlegend=False,
-                    legendgroup='forecast',
-                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}"
+                    legendgroup="forecast",
+                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
                 )
                 fig.add_trace(q_hi, x, y)
 
@@ -327,50 +370,56 @@ def _plotly_forecast_create(df_fcast, subplots, sources, nrows, ncols,
             x += 1
         is_first_source = False
 
-    fig['layout'].update(autosize=False,
-                         width=width,
-                         height=height,
-                         title=title,
-                         showlegend=show_legend,
-                         legend=dict(traceorder='normal',
-                                     font=dict(family='sans-serif',
-                                               size=12,
-                                               color='#000'),
-                                     bordercolor='#FFFFFF',
-                                     borderwidth=0,
-                                     orientation='h'),
-                         # Using {} instead of  dict () because
-                         # 'l' variable raises PEP-8 warn
-                         margin={'l': 0, 'r': 0, 't': margin_top, 'b': 0},
-                         paper_bgcolor='#FFFFFF',
-                         plot_bgcolor='#E2E2E2',
-                         )
+    fig["layout"].update(
+        autosize=False,
+        width=width,
+        height=height,
+        title=title,
+        showlegend=show_legend,
+        legend=dict(
+            traceorder="normal",
+            font=dict(family="sans-serif", size=12, color="#000"),
+            bordercolor="#FFFFFF",
+            borderwidth=0,
+            orientation="h",
+        ),
+        # Using {} instead of  dict () because
+        # 'l' variable raises PEP-8 warn
+        margin={"l": 0, "r": 0, "t": margin_top, "b": 0},
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#E2E2E2",
+    )
 
     def set_axis_format(layout):
         # Update all axes in layout to have automargin=True
-        dict_format = dict(
-            automargin=True,
-            tickfont=dict(size=10)
-        )
-        dict_update = {k: dict_format for k in layout
-                       if k.startswith('xaxis') or k.startswith('yaxis')}
+        dict_format = dict(automargin=True, tickfont=dict(size=10))
+        dict_update = {
+            k: dict_format for k in layout if k.startswith("xaxis") or k.startswith("yaxis")
+        }
         layout.update(dict_update)
 
-    set_axis_format(fig['layout'])
+    set_axis_format(fig["layout"])
 
     if not subplots and add_rangeslider:
-        fig['layout'].update(xaxis=dict(rangeslider=dict(visible=True),
-                                        type='date'))
+        fig["layout"].update(xaxis=dict(rangeslider=dict(visible=True), type="date"))
 
     return fig
 
 
-def plot_forecast(df_fcast, output='html', path=None, width=None, height=None,
-                  title=None, dpi=70, show_legend=True, auto_open=False,
-                  include_interval=False,
-                  pi_q1=5,
-                  pi_q2=20
-                  ):
+def plot_forecast(
+    df_fcast,
+    output="html",
+    path=None,
+    width=None,
+    height=None,
+    title=None,
+    dpi=70,
+    show_legend=True,
+    auto_open=False,
+    include_interval=False,
+    pi_q1=5,
+    pi_q2=20,
+):
     """
     Generates matplotlib or plotly plot and saves it respectively as png or
     html
@@ -408,73 +457,109 @@ def plot_forecast(df_fcast, output='html', path=None, width=None, height=None,
     """
 
     assert isinstance(df_fcast, pd.DataFrame)
-    add_rangeslider = False   # Feature currently disabled
+    add_rangeslider = False  # Feature currently disabled
 
-    if not path and (output == 'html' or output == 'png'):
-        logger.error('No export path provided.')
+    if not path and (output == "html" or output == "png"):
+        logger.error("No export path provided.")
         return 1
 
-    if 'source' in df_fcast.columns and df_fcast.source.nunique() > 1:
+    if "source" in df_fcast.columns and df_fcast.source.nunique() > 1:
         subplots = True
-        sources = df_fcast.loc[df_fcast['is_actuals'], 'source'].unique()
+        sources = df_fcast.loc[df_fcast["is_actuals"], "source"].unique()
         num_plots = len(sources)
         nrows = int(np.ceil(np.sqrt(num_plots)))
-        ncols = int(np.ceil(1. * num_plots / nrows))
+        ncols = int(np.ceil(1.0 * num_plots / nrows))
     else:
         # Only one set of actuals and forecast needed
         subplots = False
-        sources = ['y']
+        sources = ["y"]
         nrows = 1
         ncols = 1
 
-    if output == 'png':
+    if output == "png":
         if _matplotlib_imported:
-            fig = _matplotlib_forecast_create(df_fcast, subplots, sources,
-                                              nrows, ncols, width, height,
-                                              title, dpi, show_legend,
-                                              include_interval)
+            fig = _matplotlib_forecast_create(
+                df_fcast,
+                subplots,
+                sources,
+                nrows,
+                ncols,
+                width,
+                height,
+                title,
+                dpi,
+                show_legend,
+                include_interval,
+            )
 
-            path = '{}.png'.format(path)
-            dirname, fname = os.path.split(path)
-            if dirname != '' and not os.path.exists(dirname):
-                logger.error('Path missing {}'.format(path))
-                os.makedirs(dirname)
+            path = f"{path}.png"
+            dirname, _ = os.path.split(path)
+            if dirname and not os.path.exists(dirname):
+                logger.info("Creating output directory %s", dirname)
+                os.makedirs(dirname, exist_ok=True)
             plt.savefig(path, dpi=dpi)
 
             if auto_open:
-                fileurl = 'file://{}'.format(path)
+                fileurl = f"file://{path}"
                 webbrowser.open(fileurl, new=2, autoraise=True)
         else:
-            logger.error('Please install matplotlib library to enable this '
-                         'feature.')
-    elif output == 'html':
+            logger.error("Please install matplotlib library to enable this feature.")
+    elif output == "html":
         if _plotly_imported:
-            fig = _plotly_forecast_create(df_fcast, subplots, sources, nrows,
-                                          ncols, width, height, title,
-                                          show_legend,
-                                          add_rangeslider,
-                                          include_interval, pi_q1, pi_q2)
-            path = '{}.html'.format(path)
-            py.offline.plot(fig, filename=path, show_link=False,
-                            auto_open=auto_open, include_plotlyjs='cdn')
+            fig = _plotly_forecast_create(
+                df_fcast,
+                use_subplots=subplots,
+                sources=sources,
+                nrows=nrows,
+                ncols=ncols,
+                width=width,
+                height=height,
+                title=title,
+                show_legend=show_legend,
+                add_rangeslider=add_rangeslider,
+                include_interval=include_interval,
+                pi_q1=pi_q1,
+                pi_q2=pi_q2,
+            )
+            path = f"{path}.html"
+            dirname, _ = os.path.split(path)
+            if dirname and not os.path.exists(dirname):
+                logger.info("Creating output directory %s", dirname)
+                os.makedirs(dirname, exist_ok=True)
+            py.offline.plot(
+                fig, filename=path, show_link=False, auto_open=auto_open, include_plotlyjs="cdn"
+            )
         else:
-            logger.error('Please install plotly library to enable this '
-                         'feature.')
-    elif output == 'jupyter':
+            logger.error("Please install plotly library to enable this feature.")
+    elif output == "jupyter":
         if _plotly_imported and _ipython_imported:
             py.offline.init_notebook_mode(connected=True)
-            fig = _plotly_forecast_create(df_fcast, subplots, sources, nrows,
-                                          ncols, width, height, title,
-                                          show_legend,
-                                          add_rangeslider,
-                                          include_interval, pi_q1, pi_q2)
+            fig = _plotly_forecast_create(
+                df_fcast,
+                use_subplots=subplots,
+                sources=sources,
+                nrows=nrows,
+                ncols=ncols,
+                width=width,
+                height=height,
+                title=title,
+                show_legend=show_legend,
+                add_rangeslider=add_rangeslider,
+                include_interval=include_interval,
+                pi_q1=pi_q1,
+                pi_q2=pi_q2,
+            )
             return py.offline.iplot(fig, show_link=False)
         else:
-            logger.error('Please make sure that both plotly and ipython '
-                         'libraries are installed to enable this feature.')
+            logger.error(
+                "Please make sure that both plotly and ipython "
+                "libraries are installed to enable this feature."
+            )
     else:
-        logger.error('Wrong exporting format provided. Either png, html or '
-                     'jupyter formats are supported at the moment.')
+        logger.error(
+            "Wrong exporting format provided. Either png, html or "
+            "jupyter formats are supported at the moment."
+        )
         return 1
 
     return 0

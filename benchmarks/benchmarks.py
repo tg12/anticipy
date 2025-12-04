@@ -1,8 +1,9 @@
 # Write the benchmarking functions here.
 # See "Writing benchmarks" in the asv docs for more information.
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from anticipy import forecast
 
 
