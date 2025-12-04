@@ -56,153 +56,154 @@ def _matplotlib_forecast_create(
     width=None,
     height=None,
     title=None,
-    dpi=70,
+    dpi=100,
     show_legend=True,
     include_interval=False,
 ):
     """
-    Creates matplotlib plot from forecast dataframe
+    Generate matplotlib figure from forecast data.
 
-    :param df_fcast:
-      |  Forecast Dataframe with the following columns:
-      |  - date (timestamp)
-      |  - model (str) : ID for the forecast model
-      |  - y (float) : Value of the time series in that sample
-      |  - is_actuals (bool) : True for actuals samples, False for forecast
-    :type df_fcast: pandas.DataFrame
-    :param subplots: Indicates whether a facet grid will be required
-    :type subplots: bool
-    :param sources: Includes the various sources
-    :type sources:
-    :param nrows: Number of rows
-    :type nrows: int
-    :param ncols: Number of cols
-    :type ncols: int
+    :param df_fcast: Forecast DataFrame with columns: date, model, y, is_actuals
+    :param subplots: Create facet grid for multiple sources
+    :param sources: Data sources to plot
+    :param nrows: Subplot rows
+    :param ncols: Subplot columns
     :param title: Plot title
-    :type title: str
-    :param width: plot width, in pixels
-    :type width: int
-    :param height: plot height, in pixels
-    :type height: int
-    :param dpi: plot dpi
-    :type dpi: int
-    :param show_legend: Indicates whether legends will be displayed
-    :type show_legend: bool
-
-    :return: The plot
-    :rtype: matplotlib plot instance
+    :param width: Plot width in pixels
+    :param height: Plot height in pixels
+    :param dpi: Rendering resolution
+    :param show_legend: Display legend
+    :param include_interval: Display prediction intervals
+    :return: Matplotlib figure
     """
-    assert _matplotlib_imported, (
-        "Error: matplotlib not installed. Please run pip install plotly, then import."
-    )
-    # Default palette from ggplot
-    act_col = "#00BFC4"
-    for_col = "#F8766D"
-    plt.style.use("ggplot")
+    assert _matplotlib_imported, "matplotlib required for PNG output"
+
+    # Colors and styling
+    act_col = "#119da5"  # Teal actuals
+    for_col = "#dc6450"  # Warm red forecast
+    plt.style.use("default")
     figsize = (width / dpi, height / dpi)
 
-    # Clean actuals - weights do not get plotted
-    df_fcast = df_fcast.loc[df_fcast.model != "weight"]
-
-    # create the DatetimeIndex
+    # Filter out weight rows
+    df_fcast = df_fcast.loc[df_fcast.model != "weight"].copy()
     df_fcast = df_fcast.set_index("date")
+
     fig, axes = plt.subplots(
         nrows=nrows,
         ncols=ncols,
         figsize=figsize,
         dpi=dpi,
         squeeze=False,
+        facecolor="#ffffff",
     )
-    manager = getattr(fig, "canvas", None)
-    if manager and getattr(manager, "manager", None):
-        set_title = getattr(manager.manager, "set_window_title", None)
-        if set_title:
-            set_title(title)
+    fig.suptitle(title, fontsize=12, fontweight="normal", color="#1f1f1f", y=0.98)
 
     x = 0
     y = 0
     for src in sources:
         ax = axes[x, y]
-        # Filter the specific source is subplots
-        if not subplots:
-            source_filt = True
-        else:
-            source_filt = df_fcast["source"] == src
+        source_filt = True if not subplots else (df_fcast["source"] == src)
 
-        (actuals,) = ax.plot(
+        # Plot actuals
+        ax.plot(
             df_fcast.loc[source_filt & df_fcast["is_actuals"], :].index,
             df_fcast.loc[source_filt & df_fcast["is_actuals"], "y"],
             color=act_col,
             marker="o",
-            linestyle="None",
+            markersize=4,
+            linestyle="solid",
+            linewidth=1.5,
             label="Actuals",
+            alpha=0.85,
         )
-        (forecast,) = ax.plot(
+
+        # Plot forecast
+        ax.plot(
             df_fcast.loc[source_filt & ~df_fcast["is_actuals"], :].index,
             df_fcast.loc[source_filt & ~df_fcast["is_actuals"], "y"],
             color=for_col,
-            marker="None",
+            marker="o",
+            markersize=3,
             linestyle="solid",
+            linewidth=1.5,
             label="Forecast",
+            alpha=0.80,
         )
 
-        # Fill area between 5th and 95th prediction interval
-        if include_interval and ("q5" in df_fcast.columns) and ("q95" in df_fcast.columns):
-            where_to_fill = (
+        # Prediction interval fills
+        if include_interval and "q5" in df_fcast.columns and "q95" in df_fcast.columns:
+            where_fill = (
                 source_filt
                 & (~df_fcast["is_actuals"])
-                & (~df_fcast["q5"].isnull())
-                & (~df_fcast["q95"].isnull())
+                & (df_fcast["q5"].notna())
+                & (df_fcast["q95"].notna())
             )
             ax.fill_between(
-                df_fcast.index,
-                df_fcast["q5"],
-                df_fcast["q95"],
-                where=where_to_fill,
+                df_fcast[where_fill].index,
+                df_fcast.loc[where_fill, "q5"],
+                df_fcast.loc[where_fill, "q95"],
                 facecolor=for_col,
-                alpha=0.2,
+                alpha=0.12,
+                label="95% PI",
             )
 
-        if include_interval and ("q20" in df_fcast.columns) and ("q80" in df_fcast.columns):
-            # Fill area between 20th and 80th prediction interval
-            where_to_fill_2 = (
+        if include_interval and "q20" in df_fcast.columns and "q80" in df_fcast.columns:
+            where_fill = (
                 source_filt
                 & (~df_fcast["is_actuals"])
-                & (~df_fcast["q20"].isnull())
-                & (~df_fcast["q80"].isnull())
+                & (df_fcast["q20"].notna())
+                & (df_fcast["q80"].notna())
             )
             ax.fill_between(
-                df_fcast.index,
-                df_fcast["q20"],
-                df_fcast["q80"],
-                where=where_to_fill_2,
+                df_fcast[where_fill].index,
+                df_fcast.loc[where_fill, "q20"],
+                df_fcast.loc[where_fill, "q80"],
                 facecolor=for_col,
-                alpha=0.2,
+                alpha=0.08,
+                label="80% PI",
             )
+
+        # Grid and styling
+        ax.grid(True, alpha=0.35, linestyle="-", linewidth=0.4, color="#eeeeee")
+        ax.set_facecolor("#fafafa")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#d0d0d0")
+        ax.spines["bottom"].set_color("#d0d0d0")
+        ax.spines["left"].set_linewidth(0.7)
+        ax.spines["bottom"].set_linewidth(0.7)
+        ax.tick_params(labelsize=8, colors="#666666", length=3, width=0.7)
+        
+        # X-axis date formatting
+        import matplotlib.dates as mdates
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+        ax.xaxis.set_tick_params(rotation=45, which="major")
+        for label in ax.get_xticklabels():
+            label.set_fontsize(8)
+            label.set_color("#666666")
 
         if subplots:
-            # Set the title of each subplot as per source name
-            ax.set_title(src)
+            ax.set_title(src, fontsize=10, fontweight="normal", color="#1f1f1f", pad=8)
 
         if show_legend:
-            ax.legend(handles=[actuals, forecast], labels=["Actuals", "Forecast"], loc="upper left")
+            ax.legend(loc="best", fontsize=8, framealpha=0.95, edgecolor="#e0e0e0", fancybox=True)
 
         y += 1
         if y >= ncols:
-            # New row
             y = 0
             x += 1
 
-    # Now make the rest of the graphs invisible
+    # Hide unused subplots
     while x < nrows:
         while y < ncols:
             axes[x, y].set_visible(False)
             y += 1
-        # New row
         y = 0
         x += 1
 
-    return plt.Figure
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    return fig
 
 
 def _plotly_forecast_create(
@@ -221,187 +222,169 @@ def _plotly_forecast_create(
     pi_q2=20,
 ):
     """
-    Creates matplotlib plot from forecast dataframe
+    Generate Plotly figure from forecast data.
 
-    :param df_fcast:
-      |  Forecast Dataframe with the following columns:
-      |  - date (timestamp)
-      |  - model (str) : ID for the forecast model
-      |  - y (float) : Value of the time series in that sample
-      |  - is_actuals (bool) : True for actuals samples, False for forecast
-    :type df_fcast: pandas.DataFrame
-    :param use_subplots: Indicates whether a facet grid will be required
-    :type use_subplots: bool
-    :param sources: Includes the various sources
-    :type sources:
-    :param nrows: Number of rows
-    :type nrows: int
-    :param ncols: Number of cols
-    :type ncols: int
+    :param df_fcast: Forecast DataFrame with columns: date, model, y, is_actuals
+    :param use_subplots: Create facet grid for multiple sources
+    :param sources: Data sources to plot
+    :param nrows: Subplot rows
+    :param ncols: Subplot columns
     :param title: Plot title
-    :type title: str
-    :param width: plot width, in pixels
-    :type width: int
-    :param height: plot height, in pixels
-    :type height: int
-    :param show_legend: Indicates whether legends will be displayed
-    :type show_legend: bool
-    :param add_rangeslider:
-    :type add_rangeslider: bool
-    :param include_interval:
-    :type include_interval: bool
-    :param pi_q1: Percentile for outer prediction interval (defaults to 5%-95%)
-    :type pi_q1: int
-    :param pi_q2: Percentile for inner prediction interval (defaults to 20%-80%)
-    :type pi_q2: int
-
-    :return: The plot
-    :rtype: plotly plot instance
+    :param width: Plot width in pixels
+    :param height: Plot height in pixels
+    :param show_legend: Display legend
+    :param add_rangeslider: Add range slider
+    :param include_interval: Display prediction intervals
+    :param pi_q1: Outer percentile for PI (5%-95%)
+    :param pi_q2: Inner percentile for PI (20%-80%)
+    :return: Plotly figure
     """
-    assert _plotly_imported, (
-        "Error: plotly not installed. Please run pip install plotly, then import the library"
-    )
+    assert _plotly_imported, "plotly required for HTML output"
 
     vertical_spacing = 50.0 / height if height is not None else 0.1
 
     if use_subplots:
-        titles = map(str, sources)
+        titles = list(map(str, sources))
         fig = subplots.make_subplots(
             rows=nrows,
             cols=ncols,
-            subplot_titles=list(titles),
+            subplot_titles=titles,
             print_grid=False,
-            horizontal_spacing=0.08,
+            horizontal_spacing=0.10,
             vertical_spacing=vertical_spacing,
         )
-        margin_top = 60
+        margin_top = 50
     else:
         fig = subplots.make_subplots(rows=nrows, cols=ncols, print_grid=False)
         margin_top = 30
 
     x = 1
     y = 1
-
-    # Due to plotly implementation details, we only show legend for 1 source
     is_first_source = True
 
     for src in sources:
-        # Filter the specific source is subplots
-        if not use_subplots:
-            source_filt = True
-            # actuals_name = 'Actuals'
-            # forecasts_name = 'Forecast'
-        else:
-            source_filt = df_fcast["source"] == src
-            # actuals_name = '{} Actuals'.format(str(src))
-            # forecasts_name = '{} Forecast'.format(str(src))
-
+        source_filt = True if not use_subplots else (df_fcast["source"] == src)
         actuals_name = "Actuals"
         forecasts_name = "Forecast"
 
+        # Actuals line
         actuals = go.Scatter(
             x=df_fcast.loc[source_filt & df_fcast["is_actuals"]].date,
             y=df_fcast.loc[source_filt & df_fcast["is_actuals"]].y,
             name=actuals_name,
-            line=dict(color="rgba(0,191,196,0.2)"),
-            marker=dict(color="rgba(0,191,196,0.9)", size=3),
+            line=dict(color="rgb(17, 157, 165)", width=2),
+            marker=dict(color="rgb(17, 157, 165)", size=4),
             mode="lines+markers",
-            opacity=0.8,
+            opacity=0.85,
             legendgroup="actuals",
             showlegend=is_first_source,
-            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
+            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.4g}<extra></extra>",
         )
-
         fig.add_trace(actuals, x, y)
 
+        # Forecast line
         forecast = go.Scatter(
             x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
             y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].y,
             name=forecasts_name,
-            line=dict(color="rgba(248,118,109,0.4)", width=1),
-            marker=dict(color="rgba(248,118,109,0.9)", size=3),
+            line=dict(color="rgb(220, 100, 80)", width=2),
+            marker=dict(color="rgb(220, 100, 80)", size=4),
             mode="lines+markers",
             legendgroup="forecast",
             showlegend=is_first_source,
-            hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
+            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.4g}<extra></extra>",
         )
-
         fig.add_trace(forecast, x, y)
-        for pi_q in [pi_q1, pi_q2]:
-            # Fill prediction interval area
-            str_q_low = f"q{pi_q}"
-            str_q_hi = f"q{100 - pi_q}"
-            if (
-                include_interval
-                and (str_q_low in df_fcast.columns)
-                and (str_q_hi in df_fcast.columns)
-            ):
-                q_low = go.Scatter(
-                    x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
-                    y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_low],
-                    name=f"{pi_q}% PI",
-                    line=dict(color="#F8766D", width=0),
-                    mode="lines",
-                    showlegend=False,
-                    legendgroup="forecast",
-                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
-                )
 
-                fig.add_trace(q_low, x, y)
+        # Prediction intervals
+        if include_interval:
+            for pi_q in [pi_q1, pi_q2]:
+                str_q_low = f"q{pi_q}"
+                str_q_hi = f"q{100 - pi_q}"
+                if str_q_low in df_fcast.columns and str_q_hi in df_fcast.columns:
+                    q_low = go.Scatter(
+                        x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
+                        y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_low],
+                        line=dict(color="rgba(0,0,0,0)"),
+                        mode="lines",
+                        showlegend=False,
+                        hoverinfo="skip",
+                    )
+                    fig.add_trace(q_low, x, y)
 
-                q_hi = go.Scatter(
-                    x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
-                    y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_hi],
-                    name=f"{100 - pi_q}% PI",
-                    fill="tonexty",
-                    fillcolor="rgba(248,118,109,0.2)",
-                    line=dict(color="#F8766D", width=0),
-                    mode="lines",
-                    showlegend=False,
-                    legendgroup="forecast",
-                    hovertemplate="%{x|%Y-%m-%d} : %{y:.4g}",
-                )
-                fig.add_trace(q_hi, x, y)
+                    q_hi = go.Scatter(
+                        x=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]].date,
+                        y=df_fcast.loc[source_filt & ~df_fcast["is_actuals"]][str_q_hi],
+                        fill="tonexty",
+                        fillcolor=f"rgba(220, 100, 80, {0.12 if pi_q == pi_q1 else 0.08})",
+                        line=dict(color="rgba(0,0,0,0)"),
+                        mode="lines",
+                        showlegend=False,
+                        hoverinfo="skip",
+                    )
+                    fig.add_trace(q_hi, x, y)
 
         y += 1
         if y > ncols:
-            # New row
             y = 1
             x += 1
         is_first_source = False
 
+    # Layout and theme configuration
     fig["layout"].update(
         autosize=False,
         width=width,
         height=height,
-        title=title,
+        title=dict(text=title, font=dict(size=14, family="Segoe UI, sans-serif", color="#1f1f1f"), pad=dict(b=15)),
         showlegend=show_legend,
         legend=dict(
             traceorder="normal",
-            font=dict(family="sans-serif", size=12, color="#000"),
-            bordercolor="#FFFFFF",
-            borderwidth=0,
+            font=dict(family="Segoe UI, sans-serif", size=9, color="#333333"),
+            bordercolor="#e0e0e0",
+            borderwidth=0.5,
             orientation="h",
+            x=0.0,
+            y=1.08,
         ),
-        # Using {} instead of  dict () because
-        # 'l' variable raises PEP-8 warn
-        margin={"l": 0, "r": 0, "t": margin_top, "b": 0},
-        paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#E2E2E2",
+        margin={"l": 55, "r": 40, "t": margin_top, "b": 50},
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#fafafa",
+        hovermode="x unified",
+        font=dict(family="Segoe UI, sans-serif", size=9, color="#1f1f1f"),
     )
 
-    def set_axis_format(layout):
-        # Update all axes in layout to have automargin=True
-        dict_format = dict(automargin=True, tickfont=dict(size=10))
-        dict_update = {
-            k: dict_format for k in layout if k.startswith("xaxis") or k.startswith("yaxis")
-        }
-        layout.update(dict_update)
+    # Configure axes: optimized grid and typography
+    for key in fig["layout"]:
+        if key.startswith("xaxis"):
+            fig["layout"][key].update(
+                automargin=True,
+                tickfont=dict(size=8, family="Segoe UI, sans-serif", color="#666666"),
+                tickangle=-45,
+                tickformat="%Y-%m-%d",
+                gridcolor="#f5f5f5",
+                showgrid=False,
+                zeroline=False,
+                linewidth=1,
+                linecolor="#d0d0d0",
+                ticklen=4,
+            )
+        elif key.startswith("yaxis"):
+            fig["layout"][key].update(
+                automargin=True,
+                tickfont=dict(size=8, family="Segoe UI, sans-serif", color="#666666"),
+                gridcolor="#eeeeee",
+                showgrid=True,
+                gridwidth=0.5,
+                zeroline=False,
+                linewidth=1,
+                linecolor="#d0d0d0",
+                ticklen=4,
+            )
 
-    set_axis_format(fig["layout"])
-
-    if not subplots and add_rangeslider:
-        fig["layout"].update(xaxis=dict(rangeslider=dict(visible=True), type="date"))
+    if not use_subplots and add_rangeslider:
+        fig["layout"].update(
+            xaxis=dict(rangeslider=dict(visible=True, thickness=0.05), type="date")
+        )
 
     return fig
 
@@ -413,7 +396,7 @@ def plot_forecast(
     width=None,
     height=None,
     title=None,
-    dpi=70,
+    dpi=100,
     show_legend=True,
     auto_open=False,
     include_interval=False,
@@ -421,48 +404,50 @@ def plot_forecast(
     pi_q2=20,
 ):
     """
-    Generates matplotlib or plotly plot and saves it respectively as png or
-    html
+    Generate and save forecast plot as PNG or HTML.
 
-    :param df_fcast:
-      |  Forecast Dataframe with the following columns:
-      |  - date (timestamp)
-      |  - model (str) : ID for the forecast model
-      |  - y (float) : Value of the time series in that sample
-      |  - is_actuals (bool) : True for actuals samples, False for forecast
-    :type df_fcast: pandas.DataFrame
-    :param output: Indicates the output type (html=Default, png or jupyter)
-    :type output: basestring
-    :param path: File path for output
-    :type path: basestring
-    :param width: Image width, in pixels
-    :type width: int
-    :param height: Image height, in pixels
-    :type height: int
+    :param df_fcast: Forecast DataFrame with columns: date, model, y, is_actuals
+    :param output: Output format: "html", "png", or "jupyter"
+    :param path: Output file path (required for html/png)
+    :param width: Width in pixels (default 1000)
+    :param height: Height in pixels (default 600)
     :param title: Plot title
-    :type title: basestring
-    :param dpi: Image dpi
-    :type dpi: int
-    :param show_legend: Indicates whether legends will be displayed
-    :type show_legend: bool
-    :param auto_open: Indicates whether the output will be displayed
-                      automatically
-    :type auto_open: bool
-    :param pi_q1: Percentile for outer prediction interval (defaults to 5%-95%)
-    :type pi_q1: int
-    :param pi_q2: Percentile for inner prediction interval (defaults to 20%-80%)
-    :type pi_q2: int
-    :return: Success or failure code.
-    :rtype: int
+    :param dpi: Rendering DPI (default 100)
+    :param show_legend: Display legend
+    :param auto_open: Open output file after creation
+    :param include_interval: Display prediction intervals
+    :param pi_q1: Outer percentile for PI (5%-95%)
+    :param pi_q2: Inner percentile for PI (20%-80%)
+    :return: 0 on success, 1 on failure
     """
-
     assert isinstance(df_fcast, pd.DataFrame)
-    add_rangeslider = False  # Feature currently disabled
+
+    # Validate and coerce date column to datetime
+    if "date" not in df_fcast.columns:
+        logger.error("DataFrame missing required 'date' column")
+        return 1
+    
+    if not pd.api.types.is_datetime64_any_dtype(df_fcast["date"]):
+        try:
+            df_fcast = df_fcast.copy()
+            df_fcast["date"] = pd.to_datetime(df_fcast["date"])
+        except Exception as e:
+            logger.error("Failed to convert 'date' column to datetime: %s", e)
+            return 1
+
+    # Set sensible defaults for dimensions if not provided
+    if width is None:
+        width = 1000
+    if height is None:
+        height = 600
+
+    add_rangeslider = False  # Currently disabled
 
     if not path and (output == "html" or output == "png"):
         logger.error("No export path provided.")
         return 1
 
+    # Determine if we need subplots based on multiple sources
     if "source" in df_fcast.columns and df_fcast.source.nunique() > 1:
         subplots = True
         sources = df_fcast.loc[df_fcast["is_actuals"], "source"].unique()
@@ -470,7 +455,6 @@ def plot_forecast(
         nrows = int(np.ceil(np.sqrt(num_plots)))
         ncols = int(np.ceil(1.0 * num_plots / nrows))
     else:
-        # Only one set of actuals and forecast needed
         subplots = False
         sources = ["y"]
         nrows = 1
@@ -497,13 +481,16 @@ def plot_forecast(
             if dirname and not os.path.exists(dirname):
                 logger.info("Creating output directory %s", dirname)
                 os.makedirs(dirname, exist_ok=True)
-            plt.savefig(path, dpi=dpi)
+            plt.savefig(path, dpi=dpi, bbox_inches="tight", facecolor="#ffffff")
+            plt.close(fig)
 
             if auto_open:
                 fileurl = f"file://{path}"
                 webbrowser.open(fileurl, new=2, autoraise=True)
         else:
-            logger.error("Please install matplotlib library to enable this feature.")
+            logger.error("matplotlib not installed; PNG export unavailable")
+            return 1
+
     elif output == "html":
         if _plotly_imported:
             fig = _plotly_forecast_create(
@@ -530,7 +517,9 @@ def plot_forecast(
                 fig, filename=path, show_link=False, auto_open=auto_open, include_plotlyjs="cdn"
             )
         else:
-            logger.error("Please install plotly library to enable this feature.")
+            logger.error("plotly not installed; HTML export unavailable")
+            return 1
+
     elif output == "jupyter":
         if _plotly_imported and _ipython_imported:
             py.offline.init_notebook_mode(connected=True)
@@ -551,14 +540,13 @@ def plot_forecast(
             )
             return py.offline.iplot(fig, show_link=False)
         else:
-            logger.error(
-                "Please make sure that both plotly and ipython "
-                "libraries are installed to enable this feature."
-            )
+            logger.error("plotly and ipython required for Jupyter output")
+            return 1
+
     else:
         logger.error(
-            "Wrong exporting format provided. Either png, html or "
-            "jupyter formats are supported at the moment."
+            "Invalid output format '%s'. Supported formats: 'png', 'html', 'jupyter'.",
+            output,
         )
         return 1
 

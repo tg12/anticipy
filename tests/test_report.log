@@ -1,0 +1,4 @@
+2025-12-04 16:22:15 [    INFO] anticipy.forecast_plot: IPython not available, skipping importing library...
+2025-12-04 16:22:15 [   ERROR] anticipy.forecast_plot: No export path provided.
+2025-12-04 16:22:16 [   ERROR] anticipy.forecast_plot: Invalid output format 'invalid_format'. Supported formats: 'png', 'html', 'jupyter'.
+2025-12-04 16:22:16 [   ERROR] anticipy.forecast_plot: No export path provided.
